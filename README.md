@@ -39,7 +39,7 @@ sim/opt_v5_lift.py    # v5：乘波体气动模型 + 全食窗口评估 + 物理
 sim/opt_v2.py         # v2 参数寻优
 sim/fea_v2.py         # PyTorch 有限元（机匣/螺纹/螺栓）
 sim/stl*.py           # 零件 STL 生成
-docs/                 # FEA 报告、零件清单、v2 优化报告
+docs/                 # FEA 报告、零件清单、v2 优化报告、脱敏设计对话记录
 data/                 # 求解结果 JSON/CSV（opt_v2、summary_v5 等）
 figures/              # 弹道、应力、成本等图
 ```
