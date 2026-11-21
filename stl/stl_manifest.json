@@ -1,0 +1,134 @@
+[
+  {
+    "name": "nose_cone_54",
+    "file": "nose_cone_54.stl",
+    "material": "PETG",
+    "copies": 1,
+    "volume_cm3": 46.3,
+    "mass_g": 58.8,
+    "watertight": true,
+    "open_edges": 0,
+    "triangles": 17280
+  },
+  {
+    "name": "boat_tail_76to54",
+    "file": "boat_tail_76to54.stl",
+    "material": "AL6061",
+    "copies": 1,
+    "volume_cm3": 31.7,
+    "mass_g": 85.5,
+    "watertight": true,
+    "open_edges": 0,
+    "triangles": 576
+  },
+  {
+    "name": "fin_clipped_delta",
+    "file": "fin_clipped_delta.stl",
+    "material": "G10",
+    "copies": 4,
+    "volume_cm3": 18.6,
+    "mass_g": 137.6,
+    "watertight": true,
+    "open_edges": 0,
+    "triangles": 12
+  },
+  {
+    "name": "camera_wedge",
+    "file": "camera_wedge.stl",
+    "material": "PETG",
+    "copies": 1,
+    "volume_cm3": 16.0,
+    "mass_g": 20.3,
+    "watertight": true,
+    "open_edges": 0,
+    "triangles": 8
+  },
+  {
+    "name": "avionics_sled",
+    "file": "avionics_sled.stl",
+    "material": "PETG",
+    "copies": 1,
+    "volume_cm3": 10.8,
+    "mass_g": 13.7,
+    "watertight": true,
+    "open_edges": 0,
+    "triangles": 12
+  },
+  {
+    "name": "retainer_ring_58",
+    "file": "retainer_ring_58.stl",
+    "material": "AL6061",
+    "copies": 1,
+    "volume_cm3": 4.7,
+    "mass_g": 12.6,
+    "watertight": true,
+    "open_edges": 0,
+    "triangles": 576
+  },
+  {
+    "name": "booster_end_cap",
+    "file": "booster_end_cap.stl",
+    "material": "AL6061",
+    "copies": 1,
+    "volume_cm3": 19.4,
+    "mass_g": 52.3,
+    "watertight": true,
+    "open_edges": 0,
+    "triangles": 1152
+  },
+  {
+    "name": "sustainer_end_cap",
+    "file": "sustainer_end_cap.stl",
+    "material": "AL6061",
+    "copies": 1,
+    "volume_cm3": 9.3,
+    "mass_g": 25.1,
+    "watertight": true,
+    "open_edges": 0,
+    "triangles": 1152
+  },
+  {
+    "name": "payload_spacer_rib",
+    "file": "payload_spacer_rib.stl",
+    "material": "PETG",
+    "copies": 4,
+    "volume_cm3": 0.1,
+    "mass_g": 0.5,
+    "watertight": true,
+    "open_edges": 0,
+    "triangles": 12
+  },
+  {
+    "name": "payload_ring_section",
+    "file": "payload_ring_section.stl",
+    "material": "PETG",
+    "copies": 1,
+    "volume_cm3": 33.3,
+    "mass_g": 42.3,
+    "watertight": true,
+    "open_edges": 0,
+    "triangles": 576
+  },
+  {
+    "name": "interstage_sensor_plate",
+    "file": "interstage_sensor_plate.stl",
+    "material": "AL6061",
+    "copies": 1,
+    "volume_cm3": 7.9,
+    "mass_g": 21.3,
+    "watertight": true,
+    "open_edges": 0,
+    "triangles": 576
+  },
+  {
+    "name": "drogue_canister",
+    "file": "drogue_canister.stl",
+    "material": "PETG",
+    "copies": 1,
+    "volume_cm3": 24.1,
+    "mass_g": 30.6,
+    "watertight": true,
+    "open_edges": 0,
+    "triangles": 576
+  }
+]

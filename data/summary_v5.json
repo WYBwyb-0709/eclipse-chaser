@@ -1,0 +1,32 @@
+{
+  "ground_totality_s": 108.0,
+  "C2_UT_min": 32.3,
+  "shadow_speed_ms": 1377.0,
+  "target_s": 270.0,
+  "eclipse_global_max_totality_s": 130.0,
+  "eclipse_max_location": {
+    "lat": 39.23,
+    "lon": 125.65
+  },
+  "traditional": {
+    "T_cam_s": 88.0,
+    "apogee_m": 6330.917320199144,
+    "M_max": 2.3870720170548463,
+    "x_land_m": 6662.624328071453,
+    "t_land_s": 755.2099999994582
+  },
+  "lift_body_best": {
+    "T_cam_s": 88.8,
+    "angle_deg": 80,
+    "alpha_max": 4.0,
+    "tau_s": -20,
+    "apogee_m": 2193.5686315982935,
+    "M_max": 2.075298120323415,
+    "x_land_m": 551.0805280546018
+  },
+  "gain_s": 0.8,
+  "feasible_270s": false,
+  "verdict": "270s 不可达：本次日食全球最长地面全食仅约130s；沿轨跟随需826m/s，约需690MJ，超出推进剂化学能(2.5MJ)约125倍",
+  "needed_along_track_speed_ms": 826.0,
+  "prop_chemical_energy_MJ": 2.5
+}

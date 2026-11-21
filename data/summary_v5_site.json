@@ -1,0 +1,25 @@
+{
+  "site": {
+    "name": "北戴河",
+    "lat": 39.83,
+    "lon": 119.48
+  },
+  "ground_totality_s": 116.0,
+  "C2_UT_min": 36.07,
+  "traditional": {
+    "T_cam_s": 94.6,
+    "tau_s": -25,
+    "apogee_m": 2075.0,
+    "t_land_s": 274.0
+  },
+  "lift_best": {
+    "T_cam_s": 94.2,
+    "angle_deg": 57,
+    "alpha_max": 2.0,
+    "tau_s": -15,
+    "apogee_m": 2266.0,
+    "t_land_s": 255.0
+  },
+  "feasible_270s": false,
+  "note": "本次日食中国陆地最长全食约115s；270s(4.5min)物理不可达"
+}
