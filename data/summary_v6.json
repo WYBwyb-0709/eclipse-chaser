@@ -6,6 +6,16 @@
     "lon": 119.6,
     "elev_m": 10.0
   },
+  "mass": {
+    "dry_booster_kg": 5.26,
+    "dry_sustainer_kg": 1.65,
+    "prop_booster_kg": 5.21,
+    "prop_sustainer_kg": 1.15,
+    "payload_kg": 1.0,
+    "liftoff_kg": 14.27,
+    "wall_booster_mm": 9.0,
+    "wall_sustainer_mm": 6.0
+  },
   "ground_totality_s": 115.0,
   "C2_UT_min": 36.2,
   "C3_UT_min": 38.12,
@@ -14,40 +24,42 @@
   "v5_replay": {
     "az_deg": 93.6,
     "angle_deg": 57,
-    "T_cam_s": 119.0,
+    "T_cam_s": 121.0,
     "tau_s": -20,
     "note": "v5 报告的 88–95s 源于时长积分 bug：按记录条数×名义步长，实际记录间隔漂移导致低估约 20%"
   },
   "best": {
     "mode": "traditional",
-    "T_cam_s": 118.0,
-    "gain_vs_ground_s": 3.0,
-    "az_deg": 95.4,
-    "angle_deg": 55.0,
-    "tau_s": -11,
-    "apogee_m": 6048.0,
-    "M_max": 2.386,
-    "q_max_kPa": 294.6,
-    "x_land_m": 6867.0,
-    "t_land_s": 723.1
+    "T_cam_s": 123.0,
+    "gain_vs_ground_s": 8.0,
+    "az_deg": 87.4,
+    "angle_deg": 45.0,
+    "tau_s": -4,
+    "apogee_m": 3973.0,
+    "M_max": 2.058,
+    "q_max_kPa": 243.7,
+    "x_land_m": 9604.0,
+    "t_land_s": 322.7
   },
   "alt_best_unconstrained": {
-    "T_cam_s": 119.0,
+    "T_cam_s": 123.0,
     "angle_deg": 45.0,
-    "q_max_kPa": 307.1
+    "q_max_kPa": 244.6
   },
   "waverider": {
     "alpha_max_deg": 2.0,
-    "angle_deg": 55.0,
+    "angle_deg": 65.0,
     "T_cam_s": 118.0,
-    "tau_s": -15,
+    "tau_s": -20,
     "note": "同推力/同尺寸下乘波体参考面积放大 87 倍，诱导阻力过高，不占优"
   },
   "theory": {
-    "formula": "T ≈ (W + Δx)/V，W = V·Tg",
-    "T_theory_s": 120.3
+    "formula": "T ≈ (W + Δx_win)/V，W = V·Tg，Δx_win 为窗口内沿轨位移",
+    "T_theory_s": 121.8,
+    "window_dx_m": 8805.0,
+    "window_avg_speed_ms": 72.0
   },
   "feasible_270s": false,
   "needed_along_track_speed_ms": 740.0,
-  "verdict": "不出国最优：地面 115s → 骑影 T_cam≈118s（+3s）。理论上限 (W+Δx)/V≈120s；270s 需沿轨 740m/s，超推进剂能量约 125 倍，物理不可达。"
+  "verdict": "不出国最优：地面 115s → 骑影 T_cam≈123s（+8s）。理论上限 (W+Δx_win)/V≈122s；270s 需沿轨 740m/s，本弹道窗口内沿轨均值仅 72m/s，差约 10.3 倍，推进剂能量不可达。"
 }

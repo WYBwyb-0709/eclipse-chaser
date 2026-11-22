@@ -5,8 +5,8 @@
     "file": "zhu_zhu_ji_xia_duan_gai.stl",
     "material": "AL6061",
     "copies": 1,
-    "volume_cm3": 24.7,
-    "mass_g": 66.6,
+    "volume_cm3": 39.5,
+    "mass_g": 106.6,
     "watertight": true,
     "open_edges": 0,
     "triangles": 1152
@@ -17,8 +17,8 @@
     "file": "xu_hang_ji_xia_duan_gai.stl",
     "material": "AL6061",
     "copies": 1,
-    "volume_cm3": 11.1,
-    "mass_g": 29.9,
+    "volume_cm3": 15.2,
+    "mass_g": 41.1,
     "watertight": true,
     "open_edges": 0,
     "triangles": 1056

@@ -284,17 +284,17 @@ print("v2 详细 STL 生成（含螺栓孔/螺纹孔/退刀槽/倒角/减重孔�
 print("=" * 70)
 
 # ── 1. 助推机匣端盖（带点火孔 + M5 螺栓孔×4）─────────────────────
-# OD=76.2, ID=54（内螺纹接口）, t=10mm（v3: 8→10mm 加强），中心点火孔 Ø8, M5 螺栓孔×4 @ Ø65 分布圆
+# OD=76.2, ID=54（内螺纹接口）, t=16mm（v4: SF≥7），中心点火孔 Ø8, M5 螺栓孔×4 @ Ø65 分布圆
 emit("助推机匣端盖", "zhu_zhu_ji_xia_duan_gai",
      end_cap_with_holes(x=0, r_out=38.1, r_in=27.0,
-                        hole_r=4.0, n_holes=4, hole_dist=32.5, thickness=10, nseg=96),
+                        hole_r=4.0, n_holes=4, hole_dist=32.5, thickness=16, nseg=96),
      "AL6061")
 
 # ── 2. 续航机匣端盖（带传感孔 + M4 螺栓孔×4）─────────────────────
-# OD=54, ID=36, t=8mm（v3: 6→8mm 加强），中心传感孔 Ø6, M4 螺栓孔×4 @ Ø45 分布圆
+# OD=54, ID=36, t=11mm（v4: SF≥7），中心传感孔 Ø6, M4 螺栓孔×4 @ Ø45 分布圆
 emit("续航机匣端盖", "xu_hang_ji_xia_duan_gai",
      end_cap_with_holes(x=0, r_out=27.0, r_in=18.0,
-                        hole_r=3.0, n_holes=4, hole_dist=22.5, thickness=8, nseg=96),
+                        hole_r=3.0, n_holes=4, hole_dist=22.5, thickness=11, nseg=96),
      "AL6061")
 
 # ── 3. 鼻锥（带排气孔 M4×2）─────────────────────────────────────

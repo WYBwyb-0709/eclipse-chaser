@@ -82,8 +82,8 @@ def cd_mach(M):
             x0,v0=_CDM[i];x1,v1=_CDM[i+1];return v0+(v1-v0)*(M-x0)/(x1-x0)
     return 0.62
 
-BO=dict(ro=34.0,rc0=12.0,L0=150.0,N=5,At=PI/4*20.5**2,Ae=PI/4*28.0**2,OD=76.2,wall=3.0,m_dry=2.85)
-SU=dict(ro=22.5,rc0=7.0,L0=110.0,N=4,At=PI/4*13.0**2,Ae=PI/4*18.0**2,OD=54.0,wall=2.5,m_dry=1.15)
+BO=dict(ro=34.0,rc0=12.0,L0=150.0,N=6,At=PI/4*20.5**2,Ae=PI/4*28.0**2,OD=76.2,wall=9.0,m_dry=5.26)
+SU=dict(ro=22.5,rc0=7.0,L0=110.0,N=4,At=PI/4*13.0**2,Ae=PI/4*18.0**2,OD=54.0,wall=6.0,m_dry=1.65)
 PAYLOAD=1.0   # kg 相机+飞控+遥测+电源+伞舱
 SITE=dict(lat0=40.154,lon0=115.850,elev=600.0)
 AZ=math.radians(93.6); RAIL=4.0
@@ -114,7 +114,7 @@ def flight_sim(m1,m2,angle_deg,drogue_delay_s,wind_ms=0.0,two_stage=True,
             if t<=tb1:
                 frac=float(np.interp(t,m1["t"],m1["cumf"])); m=m0-mbp*frac; F=float(np.interp(t,m1["t"],m1["F"])); A=A1; phase=1
             elif t<t_sep:
-                m=ms+msp+payload_kg; F=0.0; A=A2; phase=2
+                m=mb+ms+msp+payload_kg; F=0.0; A=A2; phase=2
                 if t_sep-t<=dt: ev["sep"]=(t,x,h,vx,vh)
             elif t<t_ign:
                 m=ms+msp+payload_kg; F=0.0; A=A2; phase=2

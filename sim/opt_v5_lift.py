@@ -132,32 +132,33 @@ def pos_geo(xm,hm_agl):
 def cam_tot(arr,C2s,tau_h,step=20,hmin=300.0):
     if len(arr)<2: return 0.0,None,None
     dt=arr[1,0]-arr[0,0]; tin=[]
+    stride=arr[min(step,len(arr)-1),0]-arr[0,0]
     for i in range(0,len(arr),step):
         t,xs,hs=arr[i,0],arr[i,1],arr[i,2]
         if hs<hmin: continue
         la,lo,hg=pos_geo(xs,hs)
         if umbra_margin(la,lo,hg,ut2ep(C2s+tau_h+t/3600.0))<0: tin.append(t)
     if not tin: return 0.0,None,None
-    return len(tin)*step*dt,tin[0],tin[-1]
+    return (tin[-1]-tin[0])+stride,tin[0],tin[-1]
 
 # ================= [4] 飞行仿真 =================
 def flight_sim(angle_deg,mode="trad",alpha_max=4.0,dd_s=20.0,sust_delay=3.5,
                cd0=0.008,payload_kg=1.0,dt=0.005,tmax=1500.0):
     th=math.radians(angle_deg)
-    mb,ms=2.85,1.15
+    mb,ms=5.26,1.65
     mbp,msp=m1["prop_mass_kg"],m2["prop_mass_kg"]
     tb1,tb2=m1["burn_time"],m2["burn_time"]
     t_sep=tb1+0.6; t_ign=t_sep+sust_delay
     t=0.0;x=0.0;h=0.0;vx=0.0;vh=0.0
     on_rail=True; rail_s=0.0
-    ap_done=False; dro=False; main=False; landed=False
+    ap_done=False; t_apogee=None; dro=False; main=False; landed=False
     rec=[]; next_rec=0.0; v_rail_exit=0.0
     max_h=max_M=max_q=0.0
     while t<tmax and not landed:
         if t<=tb1:
             m=mb+mbp+ms+msp+payload_kg-mbp*float(np.interp(t,m1["t"],m1["cumf"]))
             F=float(np.interp(t,m1["t"],m1["F"]))
-        elif t<t_sep: m=ms+msp+payload_kg; F=0.0
+        elif t<t_sep: m=mb+ms+msp+payload_kg; F=0.0
         elif t<t_ign: m=ms+msp+payload_kg; F=0.0
         else:
             t2=t-t_ign
@@ -171,7 +172,7 @@ def flight_sim(angle_deg,mode="trad",alpha_max=4.0,dd_s=20.0,sust_delay=3.5,
         if mode=="trad":
             # run_all.py 同款：纯阻力，分段参考面积
             alpha=0.0
-            A=A_BO if t<=tb1 else A_SU
+            A=A_BO if t<t_sep else A_SU
             Fd=cd_mach(M)*q*A; Fl=0.0
         else:
             # 乘波体：低空大动压时不允许大攻角，滑行段用给定攻角
@@ -202,8 +203,8 @@ def flight_sim(angle_deg,mode="trad",alpha_max=4.0,dd_s=20.0,sust_delay=3.5,
                 else: ah=F/m-G0
 
         vx+=ax*dt; vh+=ah*dt
-        if (not ap_done) and vh<=0 and t>tb1+1.0: ap_done=True
-        if ap_done and (not dro) and (t>t_sep+dd_s): dro=True
+        if (not ap_done) and vh<=0 and t>tb1+1.0: ap_done=True; t_apogee=t
+        if ap_done and (not dro) and t_apogee is not None and t>=t_apogee+dd_s: dro=True
         if dro and (not main) and h<=250.0: main=True
         x+=vx*dt; h+=vh*dt; t+=dt
         max_h=max(max_h,h); max_M=max(max_M,M); max_q=max(max_q,q)

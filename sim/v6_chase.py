@@ -146,6 +146,15 @@ def shadow_kinematics(ut_h, dt_s=1.0):
 # ================= [4] 弹道 =================
 SITE = dict(name="秦皇岛", lat0=39.90, lon0=119.60, elev=10.0)
 
+def tube_mass_kg(OD, wall, L, rho_gmm3=2.70e-3):
+    """AL6061 圆管质量（kg）"""
+    return PI/4.0*(OD**2-(OD-2.0*wall)**2)*L*rho_gmm3*1e-3
+
+# 干重 = 非壳体结构（沿用 v2 估算）+ 按 FEA 壁厚重算的壳体
+# 助推：9 mm 壁（环向/屈曲 SF≥7）；续航：6 mm 壁（SF≈7.9）
+MB_DRY = 0.645 + tube_mass_kg(76.2, 9.0, 900.0)
+MS_DRY = 0.579 + tube_mass_kg(54.0, 6.0, 440.0)
+
 def pos_geo(xm, hm_agl, az_rad):
     coslat = math.cos(math.radians(SITE["lat0"]))
     return (SITE["lat0"] + math.degrees(xm*math.cos(az_rad)/R_E),
@@ -175,12 +184,12 @@ def cam_tot(arr, C2s, tau_s, az_rad, step=20, hmin=300.0):
 def flight_sim(angle_deg, az_deg, mode="trad", alpha_max=4.0, dd_s=20.0, sust_delay=3.5,
                cd0=0.008, payload_kg=1.0, dt=0.01, tmax=1200.0):
     th = math.radians(angle_deg); az = math.radians(az_deg)
-    mb, ms = 2.85, 1.15
+    mb, ms = MB_DRY, MS_DRY
     mbp, msp = m1["prop_mass_kg"], m2["prop_mass_kg"]
     tb1, tb2 = m1["burn_time"], m2["burn_time"]
     t_sep = tb1 + 0.6; t_ign = t_sep + sust_delay
     t = 0.0; x = 0.0; h = 0.0; vx = 0.0; vh = 0.0
-    on_rail = True; rail_s = 0.0; ap_done = False
+    on_rail = True; rail_s = 0.0; ap_done = False; t_apogee = None
     dro = False; main = False; landed = False
     rec = []; next_rec = 0.0
     max_h = max_M = max_q = 0.0; v_rail = 0.0
@@ -188,6 +197,8 @@ def flight_sim(angle_deg, az_deg, mode="trad", alpha_max=4.0, dd_s=20.0, sust_de
         if t <= tb1:
             m = mb+mbp+ms+msp+payload_kg - mbp*float(np.interp(t, m1["t"], m1["cumf"]))
             F = float(np.interp(t, m1["t"], m1["F"]))
+        elif t < t_sep:
+            m = mb+ms+msp+payload_kg; F = 0.0
         elif t < t_ign:
             m = ms+msp+payload_kg; F = 0.0
         else:
@@ -199,9 +210,10 @@ def flight_sim(angle_deg, az_deg, mode="trad", alpha_max=4.0, dd_s=20.0, sust_de
                 m = ms+payload_kg; F = 0.0
 
         v = math.hypot(vx, vh); rho, pa, am = atmos(h); M = v/am; q = 0.5*rho*v*v
+        ax = ah = 0.0
         if mode == "trad":
             alpha = 0.0
-            A = A_BO if t <= tb1 else A_SU
+            A = A_BO if t < t_sep else A_SU
             Fd = cd_mach(M)*q*A; Fl = 0.0
         else:
             if h > 1500.0 and M < 1.5 and q < 60000.0: alpha = alpha_max
@@ -230,8 +242,9 @@ def flight_sim(angle_deg, az_deg, mode="trad", alpha_max=4.0, dd_s=20.0, sust_de
                     ah = F/m - G0
 
         vx += ax*dt; vh += ah*dt
-        if (not ap_done) and vh <= 0.0 and t > tb1+1.0: ap_done = True
-        if ap_done and (not dro) and t > t_sep+dd_s: dro = True
+        if (not ap_done) and vh <= 0.0 and t > tb1+1.0:
+            ap_done = True; t_apogee = t
+        if ap_done and (not dro) and t_apogee is not None and t >= t_apogee+dd_s: dro = True
         if dro and (not main) and h <= 250.0: main = True
         x += vx*dt; h += vh*dt; t += dt
         max_h = max(max_h, h); max_M = max(max_M, M); max_q = max(max_q, q)
@@ -327,19 +340,33 @@ if __name__ == "__main__":
     print("\n[E] 最优方案细算 (dt=0.005)")
     arrB, evB = flight_sim(b["ang"], b["az"], "trad", dt=0.005)
     Tc, tauc, t0c, t1c, mask = best_tau(arrB, C2s, math.radians(b["az"]), range(-150, 31, 1))
-    # 理论：T ≈ (W + 沿轨位移)/V，W = V·Tg
-    T_theory = (Tg*V_s + evB["x_land"])/V_s
+    # 理论：T ≈ (W + 窗口内沿轨位移)/V，W = V·Tg
+    if t0c is not None and t1c is not None:
+        i0 = int(np.searchsorted(arrB[:, 0], t0c)); i1 = int(np.searchsorted(arrB[:, 0], t1c))
+        i1 = min(i1, len(arrB)-1)
+        dx_win = float(arrB[i1, 1]-arrB[i0, 1])
+        t_win = max(t1c-t0c, 1e-6)
+    else:
+        dx_win, t_win = 0.0, 1.0
+    T_theory = (Tg*V_s + dx_win)/V_s
+    u_avg = dx_win/t_win
     print(f"    T_cam={Tc:.1f}s  增益 相对地面 {Tc-Tg:+.1f}s")
-    print(f"    理论 (W+Δx)/V = ({Tg:.0f}s×{V_s:.0f}m/s + {evB['x_land']:.0f}m)/{V_s:.0f} = {T_theory:.1f}s")
+    print(f"    理论 (W+Δx)/V = ({Tg:.0f}s×{V_s:.0f}m/s + {dx_win:.0f}m)/{V_s:.0f} = {T_theory:.1f}s")
 
     # 物理上限：要 270 s 需要多快
     u_need = V_s - Tg*V_s/270.0
-    print(f"    要 270s 需沿轨 {u_need:.0f} m/s 持续整个窗口")
+    ratio_need = u_need/max(abs(u_avg), 1.0)
+    print(f"    要 270s 需沿轨 {u_need:.0f} m/s 持续整个窗口；本弹道窗口内均值 {u_avg:.0f} m/s（差 {ratio_need:.1f} 倍）")
 
     out = dict(
         version="v6",
         site=dict(name=SITE["name"], lat=round(SITE["lat0"], 2), lon=round(SITE["lon0"], 2),
                   elev_m=SITE["elev"]),
+        mass=dict(dry_booster_kg=round(MB_DRY, 2), dry_sustainer_kg=round(MS_DRY, 2),
+                  prop_booster_kg=round(m1["prop_mass_kg"], 2), prop_sustainer_kg=round(m2["prop_mass_kg"], 2),
+                  payload_kg=1.0,
+                  liftoff_kg=round(MB_DRY+MS_DRY+m1["prop_mass_kg"]+m2["prop_mass_kg"]+1.0, 2),
+                  wall_booster_mm=9.0, wall_sustainer_mm=6.0),
         ground_totality_s=round(Tg, 1),
         C2_UT_min=round(C2s*60, 2),
         C3_UT_min=round(C2s*60+Tg/60.0, 2),
@@ -358,13 +385,14 @@ if __name__ == "__main__":
                         T_cam_s=round(lift_rows[0]["T"], 1), tau_s=lift_rows[0]["tau"],
                         note="同推力/同尺寸下乘波体参考面积放大 87 倍，诱导阻力过高，不占优")
                    if lift_rows else None),
-        theory=dict(formula="T ≈ (W + Δx)/V，W = V·Tg",
-                    T_theory_s=round(T_theory, 1)),
+        theory=dict(formula="T ≈ (W + Δx_win)/V，W = V·Tg，Δx_win 为窗口内沿轨位移",
+                    T_theory_s=round(T_theory, 1), window_dx_m=round(dx_win, 0),
+                    window_avg_speed_ms=round(u_avg, 0)),
         feasible_270s=False,
         needed_along_track_speed_ms=round(u_need, 0),
         verdict=(f"不出国最优：地面 {Tg:.0f}s → 骑影 T_cam≈{Tc:.0f}s（{Tc-Tg:+.0f}s）。"
-                 f"理论上限 (W+Δx)/V≈{T_theory:.0f}s；270s 需沿轨 {u_need:.0f}m/s，"
-                 f"超推进剂能量约 125 倍，物理不可达。"))
+                 f"理论上限 (W+Δx_win)/V≈{T_theory:.0f}s；270s 需沿轨 {u_need:.0f}m/s，"
+                 f"本弹道窗口内沿轨均值仅 {u_avg:.0f}m/s，差约 {ratio_need:.1f} 倍，推进剂能量不可达。"))
 
     json.dump(out, open(f"{DATA}/summary_v6.json", "w"), ensure_ascii=False, indent=2)
     print(f"\n已写出 {DATA}/summary_v6.json")

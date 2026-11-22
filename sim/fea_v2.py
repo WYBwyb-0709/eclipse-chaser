@@ -74,24 +74,29 @@ MAT = {
 PI = math.pi
 G0 = 9.80665
 
+def min_sf(record):
+    """取记录中所有 SF* 数值字段的最小值（忽略缺失项）"""
+    vals = [v for k, v in record.items() if k.startswith("SF") and isinstance(v, (int, float))]
+    return min(vals) if vals else float("nan")
+
 # ============================================================
 # 发动机峰值参数（来自 v2 仿真）
 # ============================================================
 BO_v2 = dict(ro=34.0, rc0=12.0, L0=150.0, N=6, At=PI/4*20.5**2, Ae=PI/4*28.0**2,
-             OD=76.2, wall=4.0, m_dry=2.89)  # v3: t=4mm（屈曲加强）
+             OD=76.2, wall=9.0, m_dry=5.26)  # v4: t=9mm（环向/屈曲 SF≥7）；m_dry 含壳体 4.62kg + 结构 0.64kg
 SU_v2 = dict(ro=22.5, rc0=7.0, L0=110.0, N=4, At=PI/4*13.0**2, Ae=PI/4*18.0**2,
-             OD=54.0, wall=3.0, m_dry=1.18)  # v3: t=3mm（屈曲加强）
+             OD=54.0, wall=6.0, m_dry=1.65)  # v4: t=6mm（SF≥7）；m_dry 含壳体 1.08kg + 结构 0.57kg
 
 # ============================================================
 # [1] 环向/纵向应力（PyTorch 批量化）
 # ============================================================
-def stress_basin(P_MPa, OD_mm, t_mm, E_MPa):
+def stress_basin(P_MPa, OD_mm, t_mm, sy_MPa):
     """薄壁压力容器应力，PyTorch 实现"""
-    P = tn(P_MPa); D = tn(OD_mm); T = tn(t_mm)
+    P = tn(P_MPa); D = tn(OD_mm); T = tn(t_mm); sy = tn(sy_MPa)
     sigma_h = P * D / (2.0 * T)   # 环向
     sigma_l = P * D / (4.0 * T)   # 纵向
-    SF_h = E_MPa / 276.0 / sigma_h  # 以 sy=276 为基准归一化（AL6061）
-    SF_l = E_MPa / 276.0 / sigma_l
+    SF_h = sy / sigma_h           # 以材料屈服强度为基准
+    SF_l = sy / sigma_l
     return float(ta(sigma_h)), float(ta(sigma_l)), float(ta(SF_h)), float(ta(SF_l))
 
 # ============================================================
@@ -175,8 +180,8 @@ def assemble_fem_1d(n_elems, n_nodes, element_len, E, I, boundary_conditions, lo
 # [4] 螺栓强度校核（PyTorch 批量）
 # ============================================================
 def bolt_check(F_N, d_nom_mm, sy_MPa, n_bolts=1):
-    """单个螺栓强度校核，PyTorch 实现"""
-    F = tn(F_N); d = tn(d_nom_mm); sy = tn(sy_MPa)
+    """单个螺栓强度校核，PyTorch 实现。F_N 为接头总载荷，按 n_bolts 均分。"""
+    F = tn(F_N / max(n_bolts, 1)); d = tn(d_nom_mm); sy = tn(sy_MPa)
     d_root = d * 0.84
     A = PI * d_root**2 / 4.0
     sigma_t = F / A            # 拉伸应力 MPa
@@ -192,8 +197,9 @@ def natural_frequency_beam(E, rho, A_cross, I, L, n_mode=1):
     """
     悬臂梁一阶固有频率（Hz）
     f = (1.875)^2 * sqrt(E·I / (ρ·A·L⁴)) / (2π)
+    单位约定：E 用 MPa、ρ 用 g/mm³，故 E 需 ×1e6 换算到 g/(mm·s²)。
     """
-    omega = (1.87504**2) * math.sqrt(E * I / (rho * A_cross * L**4))
+    omega = (1.87504**2) * math.sqrt(E * 1e6 * I / (rho * A_cross * L**4))
     return omega / (2.0 * PI)
 
 # ============================================================
@@ -218,11 +224,11 @@ def run_fea():
     P_bo = 8.2  # MPa（峰值膛压）
     L_bo = BO_v2["N"] * BO_v2["L0"]  # 900mm
     OD_bo = BO_v2["OD"]
-    t_bo = 8.0  # v4: SF=7.0 所需壁厚（原 v3=4mm，SF≈1.8）
+    t_bo = 9.0  # v4: SF≥7 所需壁厚（环向 7.95 / 屈曲 ~7.5）
     m_bo_prop = 5.21  # kg
     F_bo_max = 4800   # N
 
-    sigma_h, sigma_l, sf_h, sf_l = stress_basin(P_bo, OD_bo, t_bo, MAT["AL6061"]["E"])
+    sigma_h, sigma_l, sf_h, sf_l = stress_basin(P_bo, OD_bo, t_bo, MAT["AL6061"]["sy"])
     P_cr_bo = buckling_pressure(69.0, L_bo, OD_bo, t_bo)
     sf_buck_bo = P_cr_bo / P_bo
     a_max_bo = F_bo_max / ((BO_v2["m_dry"] + m_bo_prop) * G0)
@@ -265,7 +271,7 @@ def run_fea():
     OD_su = SU_v2["OD"]
     t_su = 6.0  # v4: SF=7.0 所需壁厚（原 v3=3mm，SF≈3.9）
 
-    sigma_h_su, sigma_l_su, sf_h_su, sf_l_su = stress_basin(P_su, OD_su, t_su, MAT["AL6061"]["E"])
+    sigma_h_su, sigma_l_su, sf_h_su, sf_l_su = stress_basin(P_su, OD_su, t_su, MAT["AL6061"]["sy"])
     P_cr_su = buckling_pressure(69.0, L_su, OD_su, t_su)
     sf_buck_su = P_cr_su / P_su
 
@@ -305,7 +311,7 @@ def run_fea():
     sf_shear_fin = (sy_fin / math.sqrt(3)) / (1.5 * F_single / (b_fin * t_fin))
 
     # 固有频率
-    f1 = natural_frequency_beam(E_fin, rho_fin*1e-3*1000, A_fin, I_fin, L_fin)
+    f1 = natural_frequency_beam(E_fin, rho_fin, A_fin, I_fin, L_fin)
 
     results["尾翼"] = dict(
         material="G10", length_mm=L_fin, width_mm=b_fin, thickness_mm=t_fin,
@@ -322,12 +328,12 @@ def run_fea():
 
     # ===== 4. 端盖（薄板 FEM）=====
     # 助推端盖：外径 38.1mm，内径 27mm，厚 8mm，P=8.2MPa
-    a_cap_bo = 38.1; t_cap_bo = 10.0  # v3: 8→10mm（端盖增厚）
+    a_cap_bo = 38.1; t_cap_bo = 16.0  # v4: SF≥7 所需厚度（flat plate）
     sigma_cap_bo = 0.757 * P_bo * (a_cap_bo / t_cap_bo)**2
     delta_cap_bo = 0.0136 * P_bo * (a_cap_bo**4) / (MAT["AL6061"]["E"] * t_cap_bo**3)
     sf_cap_bo = MAT["AL6061"]["sy"] / sigma_cap_bo
 
-    a_cap_su = 27.0; t_cap_su = 10.0  # v4: 8→10mm
+    a_cap_su = 27.0; t_cap_su = 11.0  # v4: SF≥7 所需厚度（flat plate）
     sigma_cap_su = 0.757 * P_su * (a_cap_su / t_cap_su)**2
     delta_cap_su = 0.0136 * P_su * (a_cap_su**4) / (MAT["AL6061"]["E"] * t_cap_su**3)
     sf_cap_su = MAT["AL6061"]["sy"] / sigma_cap_su
@@ -359,7 +365,8 @@ def run_fea():
     for name, spec in bolt_specs.items():
         st, ts, sft, sfs = bolt_check(spec["F"], spec["d"], spec["sy"], spec["count"])
         bolt_results[name] = dict(
-            d_nom_mm=spec["d"], count=spec["count"], F_per_bolt_N=spec["F"],
+            d_nom_mm=spec["d"], count=spec["count"],
+            F_total_N=spec["F"], F_per_bolt_N=round(spec["F"]/spec["count"], 1),
             sigma_tensile_MPa=round(st, 2), tau_shear_MPa=round(ts, 2),
             SF_tensile=round(sft, 2), SF_shear=round(sfs, 2),
             verdict="PASS" if min(sft, sfs) > 2.0 else "CHECK"
@@ -436,7 +443,7 @@ def run_fea():
     # ===== 9. 全箭模态频率估算 =====
     # 简化：将箭体视为等截面悬臂梁
     E_al_global = MAT["AL6061"]["E"]
-    rho_al_global = MAT["AL6061"]["rho"] * 1e-3 * 1000  # kg/mm³ → g/mm³ 转换
+    rho_al_global = MAT["AL6061"]["rho"]  # g/mm³
     # 等效截面：取助推级平均截面
     D_eq = (OD_bo + OD_su) / 2.0
     t_eq = (t_bo + t_su) / 2.0
@@ -573,8 +580,7 @@ def plot_fea_results(results, **kwargs):
         sigma_max = max(r.get("sigma_hoop_MPa", r.get("sigma_bend_MPa", 0)),
                         r.get("sigma_long_MPa", 0))
         sy = MAT.get(r.get("material",""), {}).get("sy", 0)
-        sf = min(r.get("SF_hoop", r.get("SF", r.get("SF_bend", 1.0))),
-                 r.get("SF_buckling", r.get("SF_shear", 1.0)))
+        sf = min_sf(r)
         verdict = r.get("verdict", "?")
         summary_text += f"\n{key:<16} {sigma_max:>14.1f} {sy:>10.0f} {sf:>6.2f} {verdict:>6}"
     summary_text += f"\n\n{'螺栓组':<18} {'拉力(MPa)':>10} {'剪力(MPa)':>10} {'SF拉':>6} {'SF剪':>6} {'判定':>6}\n"
@@ -667,8 +673,7 @@ if __name__ == "__main__":
     print("=" * 70)
     for key in ["助推机匣", "续航机匣", "端盖_助推", "端盖_续航", "尾翼", "载荷支架"]:
         r = results[key]
-        sf_min = min(r.get("SF_hoop", r.get("SF", r.get("SF_bend", 1.0))),
-                     r.get("SF_buckling", r.get("SF_shear", 1.0)))
+        sf_min = min_sf(r)
         print(f"  {key:12s}  SF_min={sf_min:.2f}  [{r['verdict']}]")
     print(f"\n螺栓校核 ({len(results['螺栓校核'])} 组):")
     for name, r in results["螺栓校核"].items():
