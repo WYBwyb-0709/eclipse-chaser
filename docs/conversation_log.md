@@ -163,7 +163,21 @@
 - **FEA 四处 bug**：环向 SF 误用 E/276（已改 sy/σ，助推 6.40→7.95）；螺栓 `count` 参数未参与（已按接头总载荷均分，剪 SF 由 2.05→8.20）；全箭/尾翼频率密度单位错配（0.0 Hz→32.4 Hz / 27.5 Hz）；端盖汇总取 SF 时缺字段默认 1.0（已改遍历 SF* 字段）
 - **质量与壁厚自洽**：按 SF≥7 定尺为助推 9 mm、续航 6 mm、端盖 16/11 mm，干重 5.26/1.65 kg，起飞 14.27 kg；弹道随之复算
 - 全量重跑：`run_all.py`、`v6_chase.py`、`opt_v5_lift.py`、`fea_v2.py`、`mc3dof.py` 全部通过；FEA 最小 SF = **7.63**
-- Blender 插件因沙箱无 Blender 服务不可用，3D 场景/渲染未执行
+- Blender 插件因沙箱无服务不可用；3D 改由轮次 13 的 trimesh + matplotlib 完成
+
+---
+
+## 轮次 13：三维模型离屏渲染
+
+**需求**：用 trimesh / matplotlib（或自行安装 Blender）完成三维渲染。
+
+**完成内容**
+
+- 新增 `sim/render3d.py`：trimesh 读取 13 种 / 19 件 STL，matplotlib 离屏渲染
+  - `figures/rocket_3d.png`：全零件轴向爆炸图 + 编号清单
+  - `figures/parts_3d.png`：零件等轴测画廊（名称、材料、质量）
+- 校验：STL 总体积 348.5 cm³、总质量 **668.6 g**，与零件清单一致
+- 沙箱无 Blender 服务，采用 trimesh + matplotlib 方案（无需 GUI/GPU）
 
 ---
 

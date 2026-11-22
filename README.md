@@ -13,6 +13,14 @@ KNSB 两级探空火箭，追逐 **2035-09-02 日全食**（中国段）。仓�
 | 起飞质量 | 14.27 kg |
 | BOM | ¥2990 |
 
+### 1.1 三维模型
+
+![全零件轴向爆炸图](figures/rocket_3d.png)
+
+![零件三维画廊](figures/parts_3d.png)
+
+STL 由 `sim/stl_v2_detail.py` 生成，`sim/render3d.py`（trimesh + matplotlib）负责离屏渲染。
+
 ## 2. 关键结论：4.5 min 全食不可达
 
 用 NASA GSFC Besselian 根数（ΔT=80.6 s）独立复算 2035-09-02 月影（2 s 网格）：
@@ -51,8 +59,10 @@ figures/              # 弹道、应力、成本、骑影时间轴等图
 ```bash
 python3 sim/run_all.py        # v2 基线
 python3 sim/v6_chase.py       # v6 骑影方案，输出 data/summary_v6.json、figures/v6_ride.png
-python3 sim/opt_v5_lift.py    # v5 乘波体评估（时长积分 bug，仅作历史对照）
+python3 sim/opt_v5_lift.py    # v5 乘波体评估（历史对照）
 python3 sim/fea_v2.py         # FEA，输出 data/fea_results.json
+python3 sim/stl_v2_detail.py  # 生成 STL 与零件清单
+python3 sim/render3d.py       # trimesh 读取 STL，输出 figures/rocket_3d.png、parts_3d.png
 ```
 
-依赖：numpy、matplotlib、torch（CPU）。
+依赖：numpy、matplotlib、torch（CPU）、trimesh。

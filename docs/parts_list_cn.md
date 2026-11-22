@@ -1,5 +1,10 @@
 # 协和逐日 v2/v4 详细零件清单（中文文件名）
 
+![全零件轴向爆炸图](../figures/rocket_3d.png)
+
+![零件三维画廊](../figures/parts_3d.png)
+
+
 > 版本历史：
 > - v2：初始结构（助推 wall=3mm，续航 wall=2.5mm）SF≈1.8~3.9
 > - v3：高优先级加固（助推 wall=4mm，续航 wall=3mm）SF≈0.98~4.1
