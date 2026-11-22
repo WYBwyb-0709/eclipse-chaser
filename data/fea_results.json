@@ -182,8 +182,8 @@
     "note": "简化的悬臂梁模型，实际需 3D FEM 验证"
   },
   "meta": {
-    "compute_time_s": 0.042,
-    "pytorch_version": "2.12.1+cu130",
+    "compute_time_s": 0.024,
+    "pytorch_version": "2.15.0+cpu",
     "device": "cpu",
     "cuda_available": false,
     "model": "PyTorch FEM + analytical formulas"
