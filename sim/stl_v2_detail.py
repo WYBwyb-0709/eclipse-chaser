@@ -202,13 +202,13 @@ xs = np.linspace(0.0, L, 90)
 ro = np.sqrt(np.maximum(rho ** 2 - xs ** 2, 0.0)) + R - rho
 ro[-1] = 0.0
 nose_out = solid_rev(xs, ro, 96)
-# 内腔向 x<0 延伸，保证底部开口（否则会留下一整块 2mm 实心底盖）
-xs2 = np.linspace(-10.0, L, 120)
+# 内腔向 x<0 延伸，保证底部开口（否则会留下一整块 2mm 实心底盖）；
+# 尖端留 8mm 实心，避免内外卵形在 x=L 收成同一点（零壁厚、非流形接触）
+xs2 = np.linspace(-10.0, L - 8.0, 110)
 ri = np.where(xs2 >= 0.0,
               np.sqrt(np.maximum(rho ** 2 - xs2 ** 2, 0.0)) + R - rho - 2.0,
               R - 2.0)
 ri = np.maximum(ri, 0.0)
-ri[-1] = 0.0
 nose_in = solid_rev(xs2, ri, 96)
 nose = nose_out.difference(nose_in, engine=ENGINE)
 nose = radial_holes(nose, [(180.0, 0.0, 2.0), (180.0, 180.0, 2.0)], 8.3, 2.0)
