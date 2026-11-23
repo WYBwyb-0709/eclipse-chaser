@@ -1,478 +1,255 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""v2 火箭详细 STL 生成：带螺栓孔、螺纹孔、退刀槽、倒角细节。
-所有零件尺寸单位 mm，输出中文文件名 .stl，支持 Cura/PrusaSlicer 切片。
-包含：
-  - 机匣端盖（M5/M6 螺纹孔阵列）
-  - 级间尾锥（O形圈密封槽 + 定位销孔）
-  - 喷管（内螺纹 R1/4 + 螺栓孔）
-  - 尾翼（安装槽 + 减重孔）
-  - 鼻锥（排气孔 M4）
-  - 电子舱舱体（M3 螺纹孔阵列）
-  - 载荷支架（M4 通孔）
-  - 降落伞收纳筒（M5 解锁孔）
+"""协和逐日 v4 详细 STL 生成（真实布尔版）
+所有孔/槽/倒角都用 manifold3d 布尔运算生成，单件单壳体、水密。
+输出 13 种零件，单位 mm。
 """
-import math, struct, os, json, numpy as np
+import math, os, json
+import numpy as np
+import trimesh
+from shapely.geometry import Polygon
+from shapely.geometry.point import Point
 
 BASE = "/workspace/eclipse-chaser"
-OUT  = BASE + "/stl_v2_detail"
+OUT = BASE + "/stl_v2_detail"
 os.makedirs(OUT, exist_ok=True)
 PI = math.pi
+ENGINE = "manifold"
 
-# 材料密度 g/mm^3
 DENS = {"PETG": 1.27e-3, "AL6061": 2.70e-3, "G10": 1.85e-3, "SS304": 7.90e-3}
 
-# ============================================================
-# 网格工具
-# ============================================================
-def write_stl(path, tris):
-    tris = np.asarray(tris, dtype=np.float32)
-    with open(path, "wb") as f:
-        f.write(b"eclipse-chaser v2 detail part".ljust(80, b"\0"))
-        f.write(struct.pack("<I", len(tris)))
-        for t in tris:
-            n = np.cross(t[1] - t[0], t[2] - t[0])
-            ln = np.linalg.norm(n)
-            n = n / ln if ln > 1e-12 else np.array([0., 0., 1.])
-            f.write(struct.pack("<3f", *n))
-            for v in t:
-                f.write(struct.pack("<3f", *v))
-            f.write(struct.pack("<H", 0))
 
-def _volume(tris):
-    v = 0.0
-    for t in tris:
-        v += np.dot(t[0], np.cross(t[1], t[2])) / 6.0
-    return abs(v)
+# ---------------- 基础几何 ----------------
+def cyl_x(r, x0, x1, sec=96):
+    """沿 X 轴的圆柱。"""
+    m = trimesh.creation.cylinder(radius=r, height=abs(x1 - x0), sections=sec)
+    m.apply_transform(trimesh.transformations.rotation_matrix(PI / 2, [0, 1, 0]))
+    m.apply_translation([(x0 + x1) / 2.0, 0, 0])
+    return m
 
-def _watertight(tris, eps=1e-3):
-    from collections import Counter
-    key = lambda p: (round(p[0]/eps), round(p[1]/eps), round(p[2]/eps))
-    idx, faces = {}, []
-    for t in tris:
-        f = []
-        for p in t:
-            k = key(p)
-            if k not in idx: idx[k] = len(idx)
-            f.append(idx[k])
-        faces.append(f)
-    ec = Counter()
-    for f in faces:
-        for a, b in ((f[0],f[1]),(f[1],f[2]),(f[2],f[0])):
-            ea, eb = (a,b) if a<b else (b,a)
-            ec[(ea,eb)] += 1
-    bad = [e for e,c in ec.items() if c != 2]
-    return (len(bad) == 0), len(bad), len(faces)
 
-# ============================================================
-# 回转体（闭环剖面 → 水密管壳）
-# ============================================================
+def tube_x(r_out, r_in, x0, x1, sec=96):
+    """沿 X 轴的圆管（外圆柱减内圆柱）。"""
+    a = cyl_x(r_out, x0, x1, sec)
+    b = cyl_x(r_in, x0 - 1.0, x1 + 1.0, sec)
+    return a.difference(b, engine=ENGINE)
+
+
+def axial_holes(mesh, holes, x0, x1, sec=32):
+    """holes: [(y,z,r), ...]，沿 X 轴向打穿。"""
+    cut = []
+    for y, z, r in holes:
+        c = cyl_x(r, x0 - 1.0, x1 + 1.0, sec)
+        c.apply_translation([0, y, z])
+        cut.append(c)
+    return mesh.difference(cut, engine=ENGINE) if cut else mesh
+
+
+def radial_holes(mesh, holes, r_out, wall, sec=32):
+    """holes: [(x, theta_deg, r[, r_local]), ...]，沿径向打穿单侧壁。
+    r_local 是该 x 处的实际外半径（锥体必须给），默认取 r_out。"""
+    cut = []
+    for h in holes:
+        x, th, r = h[0], h[1], h[2]
+        rl = h[3] if len(h) > 3 else r_out
+        u = np.array([0.0, math.cos(math.radians(th)), math.sin(math.radians(th))])
+        c = trimesh.creation.cylinder(radius=r, height=wall + 4.0, sections=sec)
+        c.apply_transform(trimesh.geometry.align_vectors([0, 0, 1], u))
+        rc = rl - wall / 2.0
+        c.apply_translation([x, u[1] * rc, u[2] * rc])
+        cut.append(c)
+    return mesh.difference(cut, engine=ENGINE) if cut else mesh
+
+
 def revolve_loop(loop, nseg=96):
-    V, idx = [], []
-    for (x, r) in loop:
-        ii = []
+    """闭合 (x, r) 剖面绕 X 轴旋转，得到回转壳体。"""
+    V, rings = [], []
+    for x, r in loop:
+        ring = []
         for k in range(nseg):
-            a = 2*PI*k/nseg
-            ii.append(len(V)); V.append((x, r*math.cos(a), r*math.sin(a)))
-        idx.append(ii)
+            a = 2 * PI * k / nseg
+            ring.append(len(V))
+            V.append((x, r * math.cos(a), r * math.sin(a)))
+        rings.append(ring)
     F = []
-    n = len(loop)
-    for i in range(n):
-        i2 = (i+1)%n
+    for i in range(len(loop)):
+        i2 = (i + 1) % len(loop)
         for k in range(nseg):
-            k2 = (k+1)%nseg
-            F.append((idx[i][k], idx[i][k2], idx[i2][k2]))
-            F.append((idx[i][k], idx[i2][k2], idx[i2][k]))
-    return [[V[a], V[b], V[c]] for a,b,c in F]
+            k2 = (k + 1) % nseg
+            F.append((rings[i][k], rings[i][k2], rings[i2][k2]))
+            F.append((rings[i][k], rings[i2][k2], rings[i2][k]))
+    m = trimesh.Trimesh(vertices=np.array(V), faces=np.array(F), process=True)
+    m.fix_normals()
+    return m
 
-# ============================================================
-# 圆柱壳体（含端盖）— 用于机匣、舱体等
-# ============================================================
-def cylinder_shell(x0, x1, r_outer, r_inner, nseg=96):
-    """生成圆筒壳体（外壁+内壁+两个端环），闭环水密。"""
-    loop = [
-        (x0, r_outer), (x1, r_outer),
-        (x1, r_inner), (x0, r_inner),
-    ]
-    return revolve_loop(loop, nseg)
 
-# ============================================================
-# 端盖（带中心孔和螺栓孔阵列）
-# ============================================================
-def end_cap_with_holes(x, r_out, r_in, hole_r, n_holes, hole_dist, thickness, nseg=96):
-    """端盖：圆盘 + 中心孔 + n_holes 个螺栓孔（穿透）。
-    用旋转体 + 减法布尔思想：先做实心盘，再 subtract 孔。
-    这里用构造方式：环形端面 + 侧壁 + 螺栓孔通道。
-    """
-    tris = []
-    # 主体：圆环盘（x 处，从 r_in 到 r_out，厚 thickness）
-    # 用 revolve_loop 做主体
-    body = revolve_loop([
-        (x, r_in), (x, r_out), (x+thickness, r_out), (x+thickness, r_in)
-    ], nseg)
-    tris.extend(body)
+def cone_groove(x0, x1, r0, r1, depth, nseg=96):
+    """沿锥形内壁的环形槽刀具体：内壁半径从 r0 线性变到 r1，槽深 depth。"""
+    return revolve_loop([(x0, r0 - 1.0), (x0, r0 + depth),
+                         (x1, r1 + depth), (x1, r1 - 1.0)], nseg)
 
-    # 中心孔：减去 r_in 半径的圆柱通道
-    # 添加内壁面（已包含在 revolve_loop 中）
 
-    # 螺栓孔：在端盖上打 n_holes 个穿透孔
-    for i in range(n_holes):
-        angle = 2*PI*i/n_holes
-        cx = (r_in + (r_out - r_in)/2) * math.cos(angle)
-        cy = (r_in + (r_out - r_in)/2) * math.sin(angle)
-        # 用圆柱体 subtract — 用环形带孔的方式近似
-        # 螺栓孔通道：从 x 到 x+thickness 的圆柱 void
-        # 构造：侧面 + 两个端面环
-        n_s = max(12, int(6*hole_r))  # 足够的分段
-        for k in range(n_s):
-            a0 = 2*PI*k/n_s
-            a1 = 2*PI*(k+1)/n_s
-            ca0, sa0 = math.cos(a0), math.sin(a0)
-            ca1, sa1 = math.cos(a1), math.sin(a1)
-            # 侧面四边形（两个三角形）
-            p00 = (x+thickness, cx + hole_r*ca0, cy + hole_r*sa0)
-            p10 = (x,     cx + hole_r*ca0, cy + hole_r*sa0)
-            p01 = (x+thickness, cx + hole_r*ca1, cy + hole_r*sa1)
-            p11 = (x,     cx + hole_r*ca1, cy + hole_r*sa1)
-            tris.append([p00, p10, p11])
-            tris.append([p00, p11, p01])
-        # 前端面圆环扇区
-        for k in range(n_s):
-            a0 = 2*PI*k/n_s
-            a1 = 2*PI*(k+1)/n_s
-            ca0, sa0 = math.cos(a0), math.sin(a0)
-            ca1, sa1 = math.cos(a1), math.sin(a1)
-            tris.append([
-                (x+thickness, cx, cy),
-                (x+thickness, cx+hole_r*ca0, cy+hole_r*sa0),
-                (x+thickness, cx+hole_r*ca1, cy+hole_r*sa1),
-            ])
-        # 后端面圆环扇区（反向缠绕）
-        for k in range(n_s):
-            a0 = 2*PI*k/n_s
-            a1 = 2*PI*(k+1)/n_s
-            ca0, sa0 = math.cos(a0), math.sin(a0)
-            ca1, sa1 = math.cos(a1), math.sin(a1)
-            tris.append([
-                (x, cx+hole_r*ca1, cy+hole_r*sa1),
-                (x, cx+hole_r*ca0, cy+hole_r*sa0),
-                (x, cx, cy),
-            ])
-    return tris
-
-# ============================================================
-# 螺纹孔（简化：用螺旋线槽近似，实际为钻孔+攻丝）
-# ============================================================
-def threaded_hole_geom(x0, x1, r_major, r_minor, pitch, nseg=48):
-    """生成外螺纹几何（用于内螺纹孔的简化表示）。
-    x0→x1 轴向，r_major 大径，r_minor 小径，pitch 螺距。
-    返回三角剖分面片。
-    """
-    tris = []
-    turns = int(math.ceil((x1-x0)/pitch))
-    for t in range(turns):
-        x_start = x0 + t*pitch
-        x_end   = x0 + (t+1)*pitch
+def solid_rev(xs, rs, nseg=96):
+    """实心回转体（底/尖端封口），用于鼻锥等。"""
+    V, rings = [], []
+    for x, r in zip(xs, rs):
+        if r <= 1e-6:
+            continue
+        ring = []
         for k in range(nseg):
-            a0 = 2*PI*k/nseg
-            a1 = 2*PI*(k+1)/nseg
-            # 螺纹牙顶/底交替
-            r_top = r_major
-            r_bot = r_minor
-            ca0, sa0 = math.cos(a0), math.sin(a0)
-            ca1, sa1 = math.cos(a1), math.sin(a1)
-            # 前半个周期牙顶，后半个牙底
-            mid_a = (a0+a1)/2
-            if (mid_a % (2*PI)) < PI:
-                r0, r1 = r_top, r_top
-            else:
-                r0, r1 = r_bot, r_bot
-            p00 = (x_start, r0*math.cos(a0), r0*math.sin(a0))
-            p10 = (x_end,   r0*math.cos(a0), r0*math.sin(a0))
-            p01 = (x_start, r1*math.cos(a1), r1*math.sin(a1))
-            p11 = (x_end,   r1*math.cos(a1), r1*math.sin(a1))
-            tris.append([p00, p10, p11])
-            tris.append([p00, p11, p01])
-    return tris
+            a = 2 * PI * k / nseg
+            ring.append(len(V))
+            V.append((float(x), float(r * math.cos(a)), float(r * math.sin(a))))
+        rings.append(ring)
+    c0 = len(V); V.append((float(xs[0]), 0, 0))
+    tip = len(V); V.append((float(xs[-1]), 0, 0))
+    F = []
+    for k in range(nseg):                       # 底封口
+        F.append((c0, rings[0][(k + 1) % nseg], rings[0][k]))
+    for i in range(len(rings) - 1):             # 侧面
+        for k in range(nseg):
+            k2 = (k + 1) % nseg
+            F.append((rings[i][k], rings[i][k2], rings[i + 1][k2]))
+            F.append((rings[i][k], rings[i + 1][k2], rings[i + 1][k]))
+    for k in range(nseg):                       # 尖端
+        F.append((rings[-1][k], rings[-1][(k + 1) % nseg], tip))
+    m = trimesh.Trimesh(vertices=np.array(V), faces=np.array(F), process=True)
+    m.fix_normals()
+    return m
 
-# ============================================================
-# 倒角
-# ============================================================
-def chamfer_cylinder(x0, x1, r_out, chamfer_h, chamfer_deg, nseg=48):
-    """在圆柱端部加倒角（简化：环形斜面）。"""
-    r_chamfer_top = r_out - chamfer_h / math.tan(math.radians(chamfer_deg))
-    tris = []
-    for k in range(nseg):
-        a0 = 2*PI*k/nseg
-        a1 = 2*PI*(k+1)/nseg
-        ca0, sa0 = math.cos(a0), math.sin(a0)
-        ca1, sa1 = math.cos(a1), math.sin(a1)
-        p00 = (x0,       r_out*ca0,       r_out*sa0)
-        p10 = (x0+chamfer_h, r_chamfer_top*ca0, r_chamfer_top*sa0)
-        p01 = (x0,       r_out*ca1,       r_out*sa1)
-        p11 = (x0+chamfer_h, r_chamfer_top*ca1, r_chamfer_top*sa1)
-        tris.append([p00, p10, p11])
-        tris.append([p00, p11, p01])
-    return tris
 
-# ============================================================
-# 退刀槽
-# ============================================================
-def thread_chase(x, r_outer, r_chase, width, nseg=64):
-    """车削退刀槽：在圆柱面上切环形凹槽。"""
-    tris = []
-    for k in range(nseg):
-        a0 = 2*PI*k/nseg
-        a1 = 2*PI*(k+1)/nseg
-        ca0, sa0 = math.cos(a0), math.sin(a0)
-        ca1, sa1 = math.cos(a1), math.sin(a1)
-        # 侧面（外壁→槽底）
-        p00 = (x,        r_outer*ca0, r_outer*sa0)
-        p10 = (x+width,  r_outer*ca0, r_outer*sa0)
-        p01 = (x,        r_outer*ca1, r_outer*sa1)
-        p11 = (x+width,  r_outer*ca1, r_outer*sa1)
-        tris.append([p00, p10, p11])
-        tris.append([p00, p11, p01])
-        # 槽底面
-        p20 = (x+width,  r_chase*ca0, r_chase*sa0)
-        p21 = (x+width,  r_chase*ca1, r_chase*sa1)
-        tris.append([p10, p20, p21])
-        tris.append([p10, p21, p11])
-    return tris
+def plate(poly_pts, holes, thickness, z0=0.0):
+    """2D 多边形（带圆孔）沿 Z 拉伸。holes: [(x,y,r), ...]"""
+    hl = [np.asarray(Point(x, y).buffer(r, resolution=24).exterior.coords) for x, y, r in holes]
+    poly = Polygon(poly_pts, holes=hl)
+    if not poly.is_valid:
+        raise ValueError("plate: 多边形无效（孔越界或轮廓自交），shapely 会静默丢孔")
+    m = trimesh.creation.extrude_polygon(poly, height=thickness)
+    m.apply_translation([0, 0, z0])
+    return m
 
-# ============================================================
-# 减重孔（尾翼/端盖用）
-# ============================================================
-def hole_in_plate(x, y, z, r, thickness, nseg=24):
-    """在平板上打孔（穿透）。"""
-    tris = []
-    for k in range(nseg):
-        a0 = 2*PI*k/nseg
-        a1 = 2*PI*(k+1)/nseg
-        ca0, sa0 = math.cos(a0), math.sin(a0)
-        ca1, sa1 = math.cos(a1), math.sin(a1)
-        # 侧面
-        p00 = (x+r*ca0, y+r*sa0, z)
-        p10 = (x+r*ca0, y+r*sa0, z+thickness)
-        p01 = (x+r*ca1, y+r*sa1, z)
-        p11 = (x+r*ca1, y+r*sa1, z+thickness)
-        tris.append([p00, p10, p11])
-        tris.append([p00, p11, p01])
-    return tris
 
-# ============================================================
-# 发射：零件清单
-# ============================================================
+# ---------------- 输出 ----------------
 parts = []
 
-def emit(name_cn, name_en, tris, mat, n_copies=1):
-    wt, nbad, nf = _watertight(tris)
-    vol = _volume(tris)
-    m = vol * DENS[mat]
-    path = f"{OUT}/{name_en}.stl"
-    write_stl(path, tris)
+
+def emit(name_cn, name_en, mesh, mat, n_copies=1):
+    if isinstance(mesh, list):
+        mesh = trimesh.util.concatenate(mesh)
+    mesh.merge_vertices()
+    mesh.process(validate=True)
+    bodies = len(mesh.split(only_watertight=False))
+    vol = abs(float(mesh.volume)) / 1000.0          # cm³
+    mass = vol * 1000.0 * DENS[mat]                 # DENS 单位 g/mm³
+    if not mesh.is_watertight:
+        raise RuntimeError(f"{name_en}: 非水密")
+    if bodies != 1:
+        raise RuntimeError(f"{name_en}: 壳体数 {bodies} != 1（存在分离/重叠壳）")
+    mesh.export(f"{OUT}/{name_en}.stl")
     parts.append(dict(
-        name_cn=name_cn, name_en=name_en, file=os.path.basename(path),
+        name_cn=name_cn, name_en=name_en, file=f"{name_en}.stl",
         material=mat, copies=n_copies,
-        volume_cm3=round(vol/1000, 1), mass_g=round(m, 1),
-        watertight=bool(wt), open_edges=nbad, triangles=nf
+        volume_cm3=round(vol, 1), mass_g=round(mass, 1),
+        watertight=True, open_edges=0, triangles=len(mesh.faces),
     ))
-    print(f"  [{name_cn}] {name_en:25s} {mat:7s} x{n_copies}  V={vol/1000:7.1f}cm3  m={m:7.1f}g  wt={wt} edges={nbad}")
+    print(f"  [{name_cn}] {name_en:26s} {mat:7s} x{n_copies}  "
+          f"V={vol:7.1f}cm3  m={mass:7.1f}g  tri={len(mesh.faces)}")
 
-print("=" * 70)
-print("v2 详细 STL 生成（含螺栓孔/螺纹孔/退刀槽/倒角/减重孔）")
-print("=" * 70)
 
-# ── 1. 助推机匣端盖（带点火孔 + M5 螺栓孔×4）─────────────────────
-# OD=76.2, ID=54（内螺纹接口）, t=16mm（v4: SF≥7），中心点火孔 Ø8, M5 螺栓孔×4 @ Ø65 分布圆
-emit("助推机匣端盖", "zhu_zhu_ji_xia_duan_gai",
-     end_cap_with_holes(x=0, r_out=38.1, r_in=27.0,
-                        hole_r=4.0, n_holes=4, hole_dist=32.5, thickness=16, nseg=96),
-     "AL6061")
+print("=" * 72)
+print("协和逐日 v4 详细 STL（manifold3d 真布尔）")
+print("=" * 72)
 
-# ── 2. 续航机匣端盖（带传感孔 + M4 螺栓孔×4）─────────────────────
-# OD=54, ID=36, t=11mm（v4: SF≥7），中心传感孔 Ø6, M4 螺栓孔×4 @ Ø45 分布圆
-emit("续航机匣端盖", "xu_hang_ji_xia_duan_gai",
-     end_cap_with_holes(x=0, r_out=27.0, r_in=18.0,
-                        hole_r=3.0, n_holes=4, hole_dist=22.5, thickness=11, nseg=96),
-     "AL6061")
+# 1. 助推机匣端盖：Ø76.2，中心 Ø54 级间通道，厚 16，4×M5 底孔 Ø4.2 @ BCD65
+cap_bo = tube_x(38.1, 27.0, 0.0, 16.0)
+cap_bo = axial_holes(cap_bo, [(32.5, 0.0, 2.10), (0.0, 32.5, 2.10),
+                              (-32.5, 0.0, 2.10), (0.0, -32.5, 2.10)], 0.0, 16.0)
+emit("助推机匣端盖", "zhu_zhu_ji_xia_duan_gai", cap_bo, "AL6061")
 
-# ── 3. 鼻锥（带排气孔 M4×2）─────────────────────────────────────
-# L=216, base r=27（Ø54），壁厚2mm，顶部排气孔 Ø4×2
-r0, L = 27.0, 216.0
-R_curve = (r0*r0 + L*L)/(2*r0)
-xs = np.linspace(4.0, L, 60)
-ro = [math.sqrt(max(0, R_curve*R_curve - (L-x)**2)) - (R_curve - r0) for x in xs]
-ri = [max(0.3, r-2.0) for r in ro]
-loop = [(float(x), float(r)) for x,r in zip(xs,ro)] + [(float(x), float(r)) for x,r in zip(xs[::-1], ri[::-1])]
-nose_tris = revolve_loop(loop, nseg=96)
-# 排气孔（顶部两侧各一个 Ø4 通孔）
-nose_tris += hole_in_plate(x=L+2, y=0, z=0, r=2.0, thickness=8, nseg=24)  # 孔1（右）
-nose_tris += hole_in_plate(x=L+2, y=0, z=4.0, r=2.0, thickness=8, nseg=24)  # 孔2（左偏移）
-# 鼻锥由后面 bi_zhui_dao_jiao 统一生成（含倒角），此处跳过
+# 2. 续航机匣端盖：Ø54，中心 Ø36 走线通道，厚 11，4×M4 底孔 Ø3.3 @ BCD45
+cap_su = tube_x(27.0, 18.0, 0.0, 11.0)
+cap_su = axial_holes(cap_su, [(22.5, 0.0, 1.65), (0.0, 22.5, 1.65),
+                              (-22.5, 0.0, 1.65), (0.0, -22.5, 1.65)], 0.0, 11.0)
+emit("续航机匣端盖", "xu_hang_ji_xia_duan_gai", cap_su, "AL6061")
 
-# ── 4. 级间尾锥（76.2→54, L=80, 带 O 形圈密封槽 + 定位销孔）────────
-# 密封槽：径向深 2mm，宽 3mm（标准 O 形圈 groove）
-# 定位销孔：M3×12 贯穿
-tail_loop = [
-    (0, 38.1),   # 大端外
-    (80, 27.0),  # 小端外
-    (80, 25.0),  # 小端内
-    (0, 36.1),   # 大端内
-    # O形圈密封槽（在大端内侧，x=5, 径向深2mm）
-    (5, 34.1), (5, 32.1), (10, 32.1), (10, 34.1),
-]
-# 由于 revolve_loop 需要闭合剖面，密封槽用附加环面处理
-tail_body = revolve_loop(tail_loop, nseg=96)
-# 定位销孔 M3×贯穿（两个，90° 分开）
-tail_body += hole_in_plate(x=0, y=0, z=0, r=1.5, thickness=80, nseg=24)  # 销孔1
-tail_body += hole_in_plate(x=0, y=0, z=18.0, r=1.5, thickness=80, nseg=24)  # 销孔2 (90°)
-emit("级间尾锥", "ji_jian_wei_zhui", tail_body, "AL6061")
+# 3. 级间尾锥 76.2→54，L=80；内壁 O 形圈槽 + 2×M3 定位销孔
+#    内壁 r_in(x)=36.1-0.13875x，壁厚恒为 2mm（外 r_in+2）
+def _rin(x):
+    return 36.1 - (36.1 - 25.0) * x / 80.0
 
-# ── 5. 喷管组件（石墨喷管 + 螺纹接口）─────────────────────────────
-# 喉部 Ø13.0，出口 Ø18.0，L=60，螺纹 R1/4（英制锥管螺纹）
-nozzle_loop = [
-    (0, 9.0),    # 喉部
-    (30, 9.0),
-    (30, 12.0),  # 扩张段开始
-    (60, 9.0),   # 出口（注意：此处在喷管内部，外侧为大）
-    (60, 20.0),  # 外侧扩口
-    (30, 20.0),
-    (30, 9.0),   # 回到喉部外径
-    (0, 9.0),
-]
-# 更简单的做法：直接用 revolve_loop 做喷管主体（环形截面）
-nozzle_body = revolve_loop([
-    (0, 6.5), (30, 6.5), (30, 9.0), (60, 9.0),
-    (60, 10.0), (30, 10.0), (30, 14.0), (0, 14.0),
-], nseg=64)
-emit("喷管组件", "pen_guan_zu_jian", nozzle_body, "G10")
+tail = revolve_loop([(0, 38.1), (80, 27.0), (80, 25.0), (0, 36.1)], 96)
+# 槽深 0.8（留 1.2mm 壁），随内锥面走，不会切穿
+tail = tail.difference(cone_groove(5.0, 10.0, _rin(5.0), _rin(10.0), 0.8), engine=ENGINE)
+tail = radial_holes(tail, [(40.0, 0.0, 1.5, _rin(40.0) + 2.0),
+                           (40.0, 180.0, 1.5, _rin(40.0) + 2.0)], 0.0, 3.0)
+emit("级间尾锥", "ji_jian_wei_zhui", tail, "AL6061")
 
-# ── 6. 尾翼（裁剪三角，带安装槽 + 减重孔）─────────────────────────
-# 220×120×3mm，根部开 M4 安装槽，翼面开 3 个 Ø8 减重孔
-fin_poly = [(0,0), (220,0), (180,120), (90,120)]
-fin_tris = []
-for z in (-1.5, 1.5):
-    n = len(fin_poly)
-    for i in range(1, n-1):
-        fin_tris.append([(*fin_poly[0], z), (*fin_poly[i], z), (*fin_poly[i+1], z)])
-for i in range(n):
-    j = (i+1)%n
-    fin_tris.append([(*fin_poly[i], -1.5), (*fin_poly[j], -1.5), (*fin_poly[j], 1.5)])
-    fin_tris.append([(*fin_poly[i], -1.5), (*fin_poly[j], 1.5), (*fin_poly[i], 1.5)])
-# 安装槽（根部 M5 通孔，用于螺丝固定，v3: M4→M5）
-fin_tris += hole_in_plate(x=10, y=60, z=0, r=2.75, thickness=3, nseg=24)
-# 减重孔 ×3（ Ø8，沿翼展分布）
-for yy in [30, 60, 90]:
-    fin_tris += hole_in_plate(x=120, y=yy, z=0, r=4.0, thickness=3, nseg=24)
-emit("尾翼（含安装槽+减重孔）", "wei_yi_jian_zhong_kong", fin_tris, "G10", n_copies=4)
+# 4. 喷管：进气 r12 → 喉部 r10.25 → 出口 r14，外壳 r16，L=60
+nozzle = revolve_loop([(0, 16.0), (60, 16.0), (60, 14.0), (30, 10.25), (0, 12.0)], 96)
+emit("喷管组件", "pen_guan_zu_jian", nozzle, "G10")
 
-# ── 7. 鼻锥（修正版，含倒角 + 排气孔）───────────────────────────
-# 重新生成：顶部倒角 + 两侧排气孔
-nose_v2_tris = revolve_loop(loop, nseg=96)
-# 顶部倒角（Ø54→Ø48, 高 3mm, x0=L-3, x1=L）
-nose_v2_tris += chamfer_cylinder(x0=L-3, x1=L, r_out=27.0, chamfer_h=3, chamfer_deg=45, nseg=48)
-# 排气孔 M4×2（顶部两侧）
-for zy in [8.0, -8.0]:
-    nose_v2_tris += hole_in_plate(x=L+1, y=0, z=zy, r=2.0, thickness=6, nseg=24)
-emit("鼻锥（含倒角+排气孔）", "bi_zhui_dao_jiao", nose_v2_tris, "PETG")
+# 5. 尾翼 220×120×3，根部 2×M5 安装孔 + 3×Ø10 减重孔（必须落在多边形内）
+fin = plate([(0, 0), (220, 0), (180, 120), (90, 120)],
+            [(20, 8, 2.75), (60, 8, 2.75),
+             (110, 50, 5.0), (145, 50, 5.0), (110, 85, 5.0)],
+            3.0, z0=-1.5)
+emit("尾翼（含安装槽+减重孔）", "wei_yi_jian_zhong_kong", fin, "G10", n_copies=4)
 
-# ── 8. 电子舱滑板（含 M3 螺纹孔阵列）─────────────────────────────
-# 180×45×4mm，M3 螺纹孔×8（Ø2.5 底孔，M3 攻丝）
-sled_tris = []
-# 底板
-n_sled = 4
-sled_poly = [(0,0),(180,0),(180,45),(0,45)]
-for i in range(1,n_sled-1):
-    sled_tris.append([(*sled_poly[0],0), (*sled_poly[i],0), (*sled_poly[i+1],0)])
-    sled_tris.append([(*sled_poly[0],4), (*sled_poly[i+1],0), (*sled_poly[i],4)])
-for i in range(n_sled):
-    j = (i+1)%n_sled
-    sled_tris.append([(*sled_poly[i],0),(*sled_poly[j],0),(*sled_poly[j],4)])
-    sled_tris.append([(*sled_poly[i],0),(*sled_poly[j],4),(*sled_poly[i],4)])
-# M3 螺纹孔 ×8（底孔 Ø2.5，分布 10,50,90,130 × 10,30）
-for sx in [10, 50, 90, 130]:
-    for sz in [10, 30]:
-        sled_tris += hole_in_plate(x=sx, y=0, z=sz, r=1.25, thickness=4, nseg=24)
-emit("电子舱滑板（含M3螺纹孔×8）", "dian_zi_cang_hua_ban", sled_tris, "PETG")
+# 6. 鼻锥：切线卵形，底 R27、L216、壁厚 2，顶部 2×Ø4 排气孔
+R, L = 27.0, 216.0
+rho = (R * R + L * L) / (2.0 * R)
+xs = np.linspace(0.0, L, 90)
+ro = np.sqrt(np.maximum(rho ** 2 - xs ** 2, 0.0)) + R - rho
+ro[-1] = 0.0
+nose_out = solid_rev(xs, ro, 96)
+# 内腔向 x<0 延伸，保证底部开口（否则会留下一整块 2mm 实心底盖）
+xs2 = np.linspace(-10.0, L, 120)
+ri = np.where(xs2 >= 0.0,
+              np.sqrt(np.maximum(rho ** 2 - xs2 ** 2, 0.0)) + R - rho - 2.0,
+              R - 2.0)
+ri = np.maximum(ri, 0.0)
+ri[-1] = 0.0
+nose_in = solid_rev(xs2, ri, 96)
+nose = nose_out.difference(nose_in, engine=ENGINE)
+nose = radial_holes(nose, [(180.0, 0.0, 2.0), (180.0, 180.0, 2.0)], 8.3, 2.0)
+emit("鼻锥（含倒角+排气孔）", "bi_zhui_dao_jiao", nose, "PETG")
 
-# ── 9. 载荷支架肋条（M4 通孔）────────────────────────────────────
-rib_tris = []
-rib_poly = [(0,0),(30,0),(30,3),(0,3)]
-for i in range(1,2):
-    rib_tris.append([(*rib_poly[0],0),(*rib_poly[i],0),(*rib_poly[i+1],0)])
-    rib_tris.append([(*rib_poly[0],3),(*rib_poly[i+1],0),(*rib_poly[i],3)])
-for i in range(3):
-    j = (i+1)%3
-    rib_tris.append([(*rib_poly[i],0),(*rib_poly[j],0),(*rib_poly[j],3)])
-    rib_tris.append([(*rib_poly[i],0),(*rib_poly[j],3),(*rib_poly[i],3)])
-# M4 通孔 ×2（两端各一个）
-rib_tris += hole_in_plate(x=5, y=0, z=1.5, r=2.2, thickness=3, nseg=24)
-rib_tris += hole_in_plate(x=25, y=0, z=1.5, r=2.2, thickness=3, nseg=24)
-emit("载荷支架肋条（M4通孔×2）", "zai_he_zhi_jia_lei_tiao", rib_tris, "PETG", n_copies=4)
+# 7. 电子舱滑板 180×45×4，8×Ø2.5
+sled = plate([(0, 0), (180, 0), (180, 45), (0, 45)],
+             [(x, y, 1.25) for x in (10, 50, 90, 130) for y in (10, 30)], 4.0)
+emit("电子舱滑板（含M3螺纹孔×8）", "dian_zi_cang_hua_ban", sled, "PETG")
 
-# ── 10. 脐带舱圆管段（含内壁螺纹 + 安装孔）───────────────────────
-# Ø45 OD × t=2.5, L=100，内壁车 M6 螺纹（用于固定相机支架）
-ring_tris = revolve_loop([(0,22.5),(0,20.0),(100,20.0),(100,22.5)], nseg=96)
-# 内壁 M6 螺纹孔（简化：钻孔 Ø5.2 底孔 ×2，沿圆周均布）
-for zz in [20, 50, 80]:
-    ring_tris += hole_in_plate(x=zz, y=0, z=0, r=2.6, thickness=2.5, nseg=24)
-    ring_tris += hole_in_plate(x=zz, y=0, z=7.5, r=2.6, thickness=2.5, nseg=24)
-    ring_tris += hole_in_plate(x=zz, y=0, z=15.0, r=2.6, thickness=2.5, nseg=24)
-    ring_tris += hole_in_plate(x=zz, y=0, z=22.5, r=2.6, thickness=2.5, nseg=24)
-emit("脐带舱圆管段（含M6安装孔×12）", "qi_dai_cang_yuan_guan_duan", ring_tris, "PETG")
+# 8. 载荷支架肋条 30×10×3（8mm 宽只剩 1.8mm 边距，加宽到 10），2×Ø4.4
+rib = plate([(0, 0), (30, 0), (30, 10), (0, 10)],
+            [(5, 5, 2.2), (25, 5, 2.2)], 3.0)
+emit("载荷支架肋条（M4通孔×2）", "zai_he_zhi_jia_lei_tiao", rib, "PETG", n_copies=4)
 
-# ── 11. 级间传感板（含通孔 + O形圈槽）───────────────────────────
-plate_tris = revolve_loop([(0,27.0),(0,10.0),(4,10.0),(4,27.0)], nseg=96)
-# 中心通孔 Ø20（供级间通信线穿过）
-plate_tris += hole_in_plate(x=0, y=0, z=0, r=10.0, thickness=4, nseg=48)
-# O 形圈密封槽（环形凹槽，深 1.5mm，宽 2mm）
-# 简化：在板面上加环形槽（用薄环近似）
-for k in range(96):
-    a0 = 2*PI*k/96; a1 = 2*PI*(k+1)/96
-    ca0, sa0 = math.cos(a0), math.sin(a0)
-    ca1, sa1 = math.cos(a1), math.sin(a1)
-    # 槽底面（四个三角形拼成环形）
-    r_groove = 20.0
-    plate_tris.append([(4, r_groove*ca0, r_groove*sa0),
-                       (4, r_groove*ca1, r_groove*sa1),
-                       (4, (r_groove+2)*ca1, (r_groove+2)*sa1)])
-    plate_tris.append([(4, r_groove*ca0, r_groove*sa0),
-                       (4, (r_groove+2)*ca1, (r_groove+2)*sa1),
-                       (4, (r_groove+2)*ca0, (r_groove+2)*sa0)])
-emit("级间传感板（含通孔+O形圈槽）", "ji_jian_chuan_gan_ban", plate_tris, "AL6061")
+# 9. 脐带舱圆管 Ø45×2.5，L100，12×M6 安装孔（径向）
+umb = tube_x(22.5, 20.0, 0.0, 100.0)
+umb = radial_holes(umb, [(x, th, 2.6) for x in (20, 50, 80) for th in (0, 90, 180, 270)],
+                   22.5, 2.5)
+emit("脐带舱圆管段（含M6安装孔×12）", "qi_dai_cang_yuan_guan_duan", umb, "PETG")
 
-# ── 12. 减速伞收纳筒（含 M5 解锁孔）──────────────────────────────
-can_tris = revolve_loop([(0,17.5),(0,14.5),(80,14.5),(80,17.5)], nseg=96)
-# M5 解锁孔 ×2（穿透筒壁，用于插销解锁）
-for zz in [20, 60]:
-    can_tris += hole_in_plate(x=zz, y=0, z=0, r=2.75, thickness=3.0, nseg=24)
-    can_tris += hole_in_plate(x=zz, y=0, z=7.5, r=2.75, thickness=3.0, nseg=24)
-emit("减速伞收纳筒（含M5解锁孔×2）", "jian_su_san_shou_na_tong", can_tris, "PETG")
+# 10. 级间传感板：Ø54，中心 Ø20，厚 4，正面 O 形圈槽
+sensor = revolve_loop([(0, 10.0), (0, 27.0), (4, 27.0), (4, 10.0)], 96)
+sensor = sensor.difference(tube_x(22.0, 20.0, 2.5, 5.0), engine=ENGINE)
+emit("级间传感板（含通孔+O形圈槽）", "ji_jian_chuan_gan_ban", sensor, "AL6061")
 
-# ── 13. 喷管保持环（含螺纹）─────────────────────────────────────
-ring_tris2 = revolve_loop([(0,29),(0,33),(6,33),(6,29)], nseg=64)
-# 外缘倒角（两端各一个）
-ring_tris2 += chamfer_cylinder(x0=0, x1=1.5, r_out=33.0, chamfer_h=1.5, chamfer_deg=45, nseg=32)
-ring_tris2 += chamfer_cylinder(x0=6-1.5, x1=6, r_out=33.0, chamfer_h=1.5, chamfer_deg=45, nseg=32)
-emit("喷管保持环（含倒角）", "pen_guan_bao_chi_huan", ring_tris2, "AL6061")
+# 11. 减速伞收纳筒 Ø35×3，L80，2×M5 径向解锁孔（相隔 180°）
+can = tube_x(17.5, 14.5, 0.0, 80.0)
+can = radial_holes(can, [(20.0, 90.0, 2.75), (60.0, 270.0, 2.75)], 17.5, 3.0)
+emit("减速伞收纳筒（含M5解锁孔×2）", "jian_su_san_shou_na_tong", can, "PETG")
 
-# ── 14. 相机安装楔块（含 M3 安装孔）──────────────────────────────
-wedge_tris = []
-wedge_poly = [(0,0),(60,0),(0,40)]
-for i in range(1,2):
-    wedge_tris.append([(*wedge_poly[0],0),(*wedge_poly[i],0),(*wedge_poly[i+1],0)])
-    wedge_tris.append([(*wedge_poly[0],40),(*wedge_poly[i+1],0),(*wedge_poly[i],40)])
-for i in range(2):
-    j = (i+1)%2
-    wedge_tris.append([(*wedge_poly[i],0),(*wedge_poly[j],0),(*wedge_poly[j],40)])
-    wedge_tris.append([(*wedge_poly[i],0),(*wedge_poly[j],40),(*wedge_poly[i],40)])
-# M3 安装孔 ×2（楔块底面）
-wedge_tris += hole_in_plate(x=15, y=0, z=5, r=1.25, thickness=40, nseg=24)
-wedge_tris += hole_in_plate(x=45, y=0, z=5, r=1.25, thickness=40, nseg=24)
-emit("相机安装楔块（含M3安装孔×2）", "xiang_ji_an_zhuang_xi_kuai", wedge_tris, "PETG")
+# 12. 喷管保持环 Ø66/Ø58，厚 6，两端倒角
+ret = revolve_loop([(0, 31.5), (1.5, 33.0), (4.5, 33.0), (6, 31.5), (6, 29.0), (0, 29.0)], 96)
+emit("喷管保持环（含倒角）", "pen_guan_bao_chi_huan", ret, "AL6061")
 
-# ── 汇总 ──────────────────────────────────────────────────────────
+# 13. 相机安装楔块 60×40×40，2×Ø2.5
+wedge = plate([(0, 0), (60, 0), (0, 40)],
+              [(15, 6, 1.25), (40, 6, 1.25)], 40.0, z0=-20.0)
+emit("相机安装楔块（含M3安装孔×2）", "xiang_ji_an_zhuang_xi_kuai", wedge, "PETG")
+
+# ---------------- 汇总 ----------------
 with open(f"{OUT}/stl_manifest.json", "w") as f:
     json.dump(parts, f, indent=2, ensure_ascii=False)
 
@@ -481,10 +258,10 @@ tot_mass = sum(p["mass_g"] * p["copies"] for p in parts)
 tot_tris = sum(p["triangles"] * p["copies"] for p in parts)
 tot_copies = sum(p["copies"] for p in parts)
 
-print("=" * 70)
+print("=" * 72)
 print(f"总零件数: {len(parts)} 种 / {tot_copies} 件")
-print(f"总体积: {tot_vol:.1f} cm³")
-print(f"总质量: {tot_mass:.1f} g")
-print(f"总三角面数: {tot_tris:,}")
+print(f"总体积:   {tot_vol:.1f} cm³")
+print(f"总质量:   {tot_mass:.1f} g")
+print(f"总三角面: {tot_tris:,}")
 print(f"全部水密: {all(p['watertight'] for p in parts)}")
 print(f"输出目录: {OUT}/")

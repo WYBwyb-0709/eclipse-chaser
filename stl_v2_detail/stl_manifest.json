@@ -5,11 +5,11 @@
     "file": "zhu_zhu_ji_xia_duan_gai.stl",
     "material": "AL6061",
     "copies": 1,
-    "volume_cm3": 39.5,
-    "mass_g": 106.6,
+    "volume_cm3": 35.4,
+    "mass_g": 95.6,
     "watertight": true,
     "open_edges": 0,
-    "triangles": 1152
+    "triangles": 1296
   },
   {
     "name_cn": "续航机匣端盖",
@@ -17,11 +17,11 @@
     "file": "xu_hang_ji_xia_duan_gai.stl",
     "material": "AL6061",
     "copies": 1,
-    "volume_cm3": 15.2,
-    "mass_g": 41.1,
+    "volume_cm3": 13.6,
+    "mass_g": 36.8,
     "watertight": true,
     "open_edges": 0,
-    "triangles": 1056
+    "triangles": 1296
   },
   {
     "name_cn": "级间尾锥",
@@ -29,11 +29,11 @@
     "file": "ji_jian_wei_zhui.stl",
     "material": "AL6061",
     "copies": 1,
-    "volume_cm3": 25.5,
-    "mass_g": 68.9,
-    "watertight": false,
-    "open_edges": 96,
-    "triangles": 1632
+    "volume_cm3": 30.8,
+    "mass_g": 83.1,
+    "watertight": true,
+    "open_edges": 0,
+    "triangles": 1800
   },
   {
     "name_cn": "喷管组件",
@@ -41,11 +41,11 @@
     "file": "pen_guan_zu_jian.stl",
     "material": "G10",
     "copies": 1,
-    "volume_cm3": 16.3,
-    "mass_g": 30.1,
+    "volume_cm3": 22.6,
+    "mass_g": 41.8,
     "watertight": true,
     "open_edges": 0,
-    "triangles": 1024
+    "triangles": 960
   },
   {
     "name_cn": "尾翼（含安装槽+减重孔）",
@@ -53,11 +53,11 @@
     "file": "wei_yi_jian_zhong_kong.stl",
     "material": "G10",
     "copies": 4,
-    "volume_cm3": 36.9,
-    "mass_g": 68.2,
-    "watertight": false,
-    "open_edges": 192,
-    "triangles": 204
+    "volume_cm3": 55.0,
+    "mass_g": 101.7,
+    "watertight": true,
+    "open_edges": 0,
+    "triangles": 1952
   },
   {
     "name_cn": "鼻锥（含倒角+排气孔）",
@@ -65,11 +65,11 @@
     "file": "bi_zhui_dao_jiao.stl",
     "material": "PETG",
     "copies": 1,
-    "volume_cm3": 7.8,
-    "mass_g": 10.0,
-    "watertight": false,
-    "open_edges": 192,
-    "triangles": 23232
+    "volume_cm3": 46.2,
+    "mass_g": 58.7,
+    "watertight": true,
+    "open_edges": 0,
+    "triangles": 38528
   },
   {
     "name_cn": "电子舱滑板（含M3螺纹孔×8）",
@@ -77,11 +77,11 @@
     "file": "dian_zi_cang_hua_ban.stl",
     "material": "PETG",
     "copies": 1,
-    "volume_cm3": 10.7,
-    "mass_g": 13.6,
-    "watertight": false,
-    "open_edges": 392,
-    "triangles": 396
+    "volume_cm3": 32.2,
+    "mass_g": 40.9,
+    "watertight": true,
+    "open_edges": 0,
+    "triangles": 3116
   },
   {
     "name_cn": "载荷支架肋条（M4通孔×2）",
@@ -89,11 +89,11 @@
     "file": "zai_he_zhi_jia_lei_tiao.stl",
     "material": "PETG",
     "copies": 4,
-    "volume_cm3": 0.0,
-    "mass_g": 0.0,
-    "watertight": false,
-    "open_edges": 100,
-    "triangles": 104
+    "volume_cm3": 0.8,
+    "mass_g": 1.0,
+    "watertight": true,
+    "open_edges": 0,
+    "triangles": 788
   },
   {
     "name_cn": "脐带舱圆管段（含M6安装孔×12）",
@@ -101,11 +101,11 @@
     "file": "qi_dai_cang_yuan_guan_duan.stl",
     "material": "PETG",
     "copies": 1,
-    "volume_cm3": 33.8,
-    "mass_g": 42.9,
-    "watertight": false,
-    "open_edges": 576,
-    "triangles": 1344
+    "volume_cm3": 32.7,
+    "mass_g": 41.6,
+    "watertight": true,
+    "open_edges": 0,
+    "triangles": 2544
   },
   {
     "name_cn": "级间传感板（含通孔+O形圈槽）",
@@ -113,11 +113,11 @@
     "file": "ji_jian_chuan_gan_ban.stl",
     "material": "AL6061",
     "copies": 1,
-    "volume_cm3": 9.1,
-    "mass_g": 24.5,
-    "watertight": false,
-    "open_edges": 288,
-    "triangles": 1056
+    "volume_cm3": 7.5,
+    "mass_g": 20.3,
+    "watertight": true,
+    "open_edges": 0,
+    "triangles": 1536
   },
   {
     "name_cn": "减速伞收纳筒（含M5解锁孔×2）",
@@ -125,11 +125,11 @@
     "file": "jian_su_san_shou_na_tong.stl",
     "material": "PETG",
     "copies": 1,
-    "volume_cm3": 24.3,
-    "mass_g": 30.9,
-    "watertight": false,
-    "open_edges": 192,
-    "triangles": 960
+    "volume_cm3": 24.0,
+    "mass_g": 30.4,
+    "watertight": true,
+    "open_edges": 0,
+    "triangles": 1096
   },
   {
     "name_cn": "喷管保持环（含倒角）",
@@ -137,11 +137,11 @@
     "file": "pen_guan_bao_chi_huan.stl",
     "material": "AL6061",
     "copies": 1,
-    "volume_cm3": 2.4,
-    "mass_g": 6.6,
-    "watertight": false,
-    "open_edges": 128,
-    "triangles": 640
+    "volume_cm3": 4.2,
+    "mass_g": 11.4,
+    "watertight": true,
+    "open_edges": 0,
+    "triangles": 1152
   },
   {
     "name_cn": "相机安装楔块（含M3安装孔×2）",
@@ -149,10 +149,10 @@
     "file": "xiang_ji_an_zhuang_xi_kuai.stl",
     "material": "PETG",
     "copies": 1,
-    "volume_cm3": 16.3,
-    "mass_g": 20.6,
-    "watertight": false,
-    "open_edges": 102,
-    "triangles": 102
+    "volume_cm3": 47.6,
+    "mass_g": 60.5,
+    "watertight": true,
+    "open_edges": 0,
+    "triangles": 784
   }
 ]

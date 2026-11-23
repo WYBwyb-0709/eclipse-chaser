@@ -30,14 +30,14 @@ MAT_COLOR = {
 }
 LIGHT = np.array([0.45, 0.55, 0.70]); LIGHT /= np.linalg.norm(LIGHT)
 
-# 爆炸图从尾到头的展示顺序
+# 爆炸图从尾到头的展示顺序（与总装轴向一致）
 ORDER = [
     "pen_guan_zu_jian", "pen_guan_bao_chi_huan", "zhu_zhu_ji_xia_duan_gai",
-    "bi_zhui_dao_jiao", "wei_yi_jian_zhong_kong", "ji_jian_wei_zhui",
-    "qi_dai_cang_yuan_guan_duan", "ji_jian_chuan_gan_ban",
-    "jian_su_san_shou_na_tong", "xu_hang_ji_xia_duan_gai",
-    "zai_he_zhi_jia_lei_tiao", "xiang_ji_an_zhuang_xi_kuai",
-    "bi_zhui", "dian_zi_cang_hua_ban",
+    "ji_jian_wei_zhui", "wei_yi_jian_zhong_kong", "ji_jian_chuan_gan_ban",
+    "qi_dai_cang_yuan_guan_duan", "jian_su_san_shou_na_tong",
+    "xu_hang_ji_xia_duan_gai", "zai_he_zhi_jia_lei_tiao",
+    "xiang_ji_an_zhuang_xi_kuai", "dian_zi_cang_hua_ban",
+    "bi_zhui_dao_jiao",
 ]
 
 
@@ -54,7 +54,7 @@ def load_parts():
     return parts
 
 
-def tri_data(mesh, max_faces=7000, seed=0):
+def tri_data(mesh, max_faces=200000, seed=0):
     f = mesh.faces
     if len(f) > max_faces:
         rng = np.random.default_rng(seed)
@@ -71,7 +71,7 @@ def facecolors(n, base):
     return np.column_stack([rgb, np.ones(len(rgb))])
 
 
-def add_mesh(ax, mesh, base, xoff=0.0, max_faces=7000, seed=0):
+def add_mesh(ax, mesh, base, xoff=0.0, max_faces=200000, seed=0):
     v, n = tri_data(mesh, max_faces, seed)
     v = v.copy()
     v[:, 0] += xoff
@@ -107,7 +107,7 @@ def render_exploded(parts):
     ax.set_facecolor("white")
 
     cursor = 0.0
-    gap = 28.0
+    gap = 55.0
     allpts = []
     for i, (it, mesh) in enumerate(parts):
         v = mesh.vertices
@@ -121,11 +121,13 @@ def render_exploded(parts):
         rad = max((hi[1] - lo[1]) / 2.0, (hi[2] - lo[2]) / 2.0)
         ax.text(xc, 0.0, -rad - 8.0, str(i + 1), fontsize=8.5, color="#222",
                 ha="center", va="top")
-        cursor += (hi[0] - lo[0]) + gap
+        # 间隔随该件直径增大，避免大端盖与尾锥在长轴压缩后视觉粘连
+        cursor += (hi[0] - lo[0]) + gap + 0.55 * 2.0 * rad
 
     fit_view(ax, np.vstack(allpts), pad=0.05)
-    ax.view_init(elev=18, azim=-60)
-    ax.set_title("协和逐日 v6 · 全零件轴向爆炸图（STL，按图纸尺寸）",
+    # 近侧视图：X 沿横向，避免大直径零件在斜视角下互相遮挡
+    ax.view_init(elev=8, azim=-80)
+    ax.set_title("协和逐日 v6 · 全零件轴向排布图（STL，按图纸尺寸）",
                  fontsize=15, pad=8, weight="bold")
 
     axl = fig.add_axes([0.78, 0.05, 0.21, 0.90]); axl.axis("off")
@@ -150,8 +152,7 @@ def render_gallery(parts):
         v = mesh.vertices
         c = (v.min(axis=0) + v.max(axis=0)) / 2.0
         m = mesh.copy(); m.apply_translation(-c)
-        pts = add_mesh(ax, m, MAT_COLOR.get(it["material"], (0.6, 0.6, 0.6)),
-                       max_faces=4000, seed=100 + i)
+        pts = add_mesh(ax, m, MAT_COLOR.get(it["material"], (0.6, 0.6, 0.6)), seed=100 + i)
         fit_view(ax, pts, pad=0.18)
         ax.view_init(elev=24, azim=-56)
         ax.set_title(f"{it['name_cn']}\n{it['material']} · {it['mass_g']:.1f} g",
