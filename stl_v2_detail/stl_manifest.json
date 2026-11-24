@@ -101,11 +101,11 @@
     "file": "qi_dai_cang_yuan_guan_duan.stl",
     "material": "PETG",
     "copies": 1,
-    "volume_cm3": 32.7,
-    "mass_g": 41.6,
+    "volume_cm3": 32.3,
+    "mass_g": 41.1,
     "watertight": true,
     "open_edges": 0,
-    "triangles": 2544
+    "triangles": 2736
   },
   {
     "name_cn": "级间传感板（含通孔+O形圈槽）",
@@ -132,13 +132,13 @@
     "triangles": 1096
   },
   {
-    "name_cn": "喷管保持环（含倒角）",
+    "name_cn": "喷管定心环（含倒角）",
     "name_en": "pen_guan_bao_chi_huan",
     "file": "pen_guan_bao_chi_huan.stl",
     "material": "AL6061",
     "copies": 1,
-    "volume_cm3": 4.2,
-    "mass_g": 11.4,
+    "volume_cm3": 10.5,
+    "mass_g": 28.3,
     "watertight": true,
     "open_edges": 0,
     "triangles": 1152

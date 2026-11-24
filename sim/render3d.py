@@ -80,7 +80,7 @@ def add_mesh(ax, mesh, base, xoff=0.0, max_faces=200000, seed=0):
     return v
 
 
-def fit_view(ax, pts, pad=0.08, max_ratio=3.0):
+def fit_view(ax, pts, pad=0.08, max_ratio=3.0, zoom=1.0):
     """按数据范围设置各轴 lim，box_aspect 跟随真实尺寸；
     最长轴相对于次长轴的比值超过 max_ratio 时压缩，避免细长物体在方框里变成一条线。"""
     p = np.asarray(pts).reshape(-1, 3)
@@ -97,7 +97,7 @@ def fit_view(ax, pts, pad=0.08, max_ratio=3.0):
     small = asp[order[-2]] if asp[order[-2]] > 1e-3 else 1.0
     if asp[order[-1]] / small > max_ratio:
         asp[order[-1]] = small * max_ratio
-    ax.set_box_aspect(tuple(float(a) for a in asp))
+    ax.set_box_aspect(tuple(float(a) for a in asp), zoom=zoom)
     ax.set_axis_off()
 
 
@@ -124,7 +124,7 @@ def render_exploded(parts):
         # 间隔随该件直径增大，避免大端盖与尾锥在长轴压缩后视觉粘连
         cursor += (hi[0] - lo[0]) + gap + 0.55 * 2.0 * rad
 
-    fit_view(ax, np.vstack(allpts), pad=0.05)
+    fit_view(ax, np.vstack(allpts), pad=0.05, zoom=1.18)
     # 近侧视图：X 沿横向，避免大直径零件在斜视角下互相遮挡
     ax.view_init(elev=8, azim=-80)
     ax.set_title("协和逐日 v6 · 全零件轴向排布图（STL，按图纸尺寸）",

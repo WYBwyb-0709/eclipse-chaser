@@ -19,7 +19,7 @@ KNSB 两级探空火箭，追逐 **2035-09-02 日全食**（中国段）。仓�
 
 ![零件三维画廊](figures/parts_3d.png)
 
-STL 由 `sim/stl_v2_detail.py` 生成（trimesh + manifold3d 真布尔，逐件校验水密/单壳体），`sim/render3d.py`（trimesh + matplotlib）负责离屏渲染。13 种 / 19 件，总质量 931.9 g。
+STL 由 `sim/stl_v2_detail.py` 生成（trimesh + manifold3d 真布尔，逐件校验水密/单壳体），`sim/render3d.py`（trimesh + matplotlib）负责离屏渲染。13 种 / 19 件，总质量 948.3 g。
 
 ## 2. 关键结论：4.5 min 全食不可达
 
