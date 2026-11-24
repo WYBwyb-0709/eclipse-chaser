@@ -218,6 +218,20 @@
 
 ---
 
+## 轮次 15：环境固化
+
+**问题**：沙箱每次重置都会清空 `site-packages`，每轮都要重装 trimesh/manifold3d/shapely。
+
+**做法**
+
+- 依赖版本锁定到 `requirements.txt`（numpy 2.5.3、matplotlib 3.11.0、torch 2.12.1、trimesh 4.11.5、manifold3d 3.5.2、shapely 2.1.2、networkx 3.6.1、rtree 1.4.1、scipy 1.18.0）
+- 虚拟环境建在仓库内 `.venv/` 并写入 `.gitignore`：环境随 workspace 保留，又不会把二进制提交进 Git
+- README「复现」一节改为先建 venv 再装依赖；之后 `.venv/bin/python sim/...` 直接运行
+
+**验证**：在新 venv 中依次跑通 `sim/stl_v2_detail.py`（13 种 / 19 件、948.3 g、全部水密）、`sim/render3d.py`、`sim/fea_v2.py`。FEA 数值与旧环境逐项一致（最小 SF 7.63、全箭一阶 32.4 Hz），`data/fea_results.json` 仅 meta 中的耗时与 torch 版本不同。默认源提供的是 CUDA 构建（2.12.1+cu130，venv 约 5.0 GB，大部分为 nvidia 运行库）；只需跑 FEA 时可改用 PyTorch CPU 轮子索引瘦身。
+
+---
+
 ## 附：关键参数速查
 
 | 项目 | 数值 |

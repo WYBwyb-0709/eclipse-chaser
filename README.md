@@ -56,6 +56,15 @@ figures/              # 弹道、应力、成本、骑影时间轴等图
 
 ## 4. 复现
 
+环境固化在仓库内的 `.venv/`（已加入 `.gitignore`，随 workspace 保留，沙箱重置后无需重装）：
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+版本锁定见 `requirements.txt`。之后直接用 `.venv/bin/python` 运行，或 `source .venv/bin/activate`。
+
 ```bash
 python3 sim/run_all.py        # v2 基线
 python3 sim/v6_chase.py       # v6 骑影方案，输出 data/summary_v6.json、figures/v6_ride.png
@@ -65,4 +74,4 @@ python3 sim/stl_v2_detail.py  # 生成 STL 与零件清单
 python3 sim/render3d.py       # trimesh 读取 STL，输出 figures/rocket_3d.png、parts_3d.png
 ```
 
-依赖：numpy、matplotlib、torch（CPU）、trimesh、manifold3d、shapely、networkx、rtree。
+依赖：numpy、matplotlib、torch（CPU，仅 FEA 需要）、trimesh、manifold3d、shapely、networkx、rtree、scipy；版本见 `requirements.txt`。
