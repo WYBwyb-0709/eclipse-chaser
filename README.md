@@ -56,22 +56,24 @@ figures/              # 弹道、应力、成本、骑影时间轴等图
 
 ## 4. 复现
 
-环境固化在仓库内的 `.venv/`（已加入 `.gitignore`，随 workspace 保留，沙箱重置后无需重装）：
+环境固化在仓库内的 `env/`（已加入 `.gitignore`，随 workspace 快照保留，沙箱重置后无需重装）：
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+python3 -m venv env
+env/bin/pip install -r requirements.txt
 ```
 
-版本锁定见 `requirements.txt`。之后直接用 `.venv/bin/python` 运行，或 `source .venv/bin/activate`。
+版本锁定见 `requirements.txt`。之后直接用 `env/bin/python` 运行，或 `source env/bin/activate`。
+
+> 别用 `.venv/` 这个名字：工作区快照的 restic 忽略列表（`/app/etc/.resticignore`）会跳过 `.venv`、`node_modules`、`__pycache__` 等目录，放在里面重置后就没了。
 
 ```bash
-python3 sim/run_all.py        # v2 基线
-python3 sim/v6_chase.py       # v6 骑影方案，输出 data/summary_v6.json、figures/v6_ride.png
-python3 sim/opt_v5_lift.py    # v5 乘波体评估（历史对照）
-python3 sim/fea_v2.py         # FEA，输出 data/fea_results.json
-python3 sim/stl_v2_detail.py  # 生成 STL 与零件清单
-python3 sim/render3d.py       # trimesh 读取 STL，输出 figures/rocket_3d.png、parts_3d.png
+env/bin/python sim/run_all.py        # v2 基线
+env/bin/python sim/v6_chase.py       # v6 骑影方案，输出 data/summary_v6.json、figures/v6_ride.png
+env/bin/python sim/opt_v5_lift.py    # v5 乘波体评估（历史对照）
+env/bin/python sim/fea_v2.py         # FEA，输出 data/fea_results.json
+env/bin/python sim/stl_v2_detail.py  # 生成 STL 与零件清单
+env/bin/python sim/render3d.py       # trimesh 读取 STL，输出 figures/rocket_3d.png、parts_3d.png
 ```
 
 依赖：numpy、matplotlib、torch（CPU，仅 FEA 需要）、trimesh、manifold3d、shapely、networkx、rtree、scipy；版本见 `requirements.txt`。

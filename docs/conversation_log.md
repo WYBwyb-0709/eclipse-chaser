@@ -232,6 +232,22 @@
 
 ---
 
+## 轮次 16：环境目录改名，修掉快照不保留的问题
+
+**现象**：轮次 15 建的 `.venv/` 在下一轮沙箱启动后消失（仓库其他文件都在）。
+
+**根因**：工作区持久化是 restic 快照（`/var/log/tool/agent-tool-host.stdout.log` 中 `restic_restore ... workspace=/workspace`），其忽略列表 `/app/etc/.resticignore` 明确排除了 `.venv`、`node_modules`、`__pycache__`、`.pytest_cache` 等目录——`.venv` 从一开始就没进备份。
+
+**做法**
+
+- 环境改建在仓库内 `env/`（不在忽略列表里），仍写进 `.gitignore`，只随快照保留、不进 Git
+- torch 改用官方 CPU 轮子（`torch==2.12.1+cpu`，requirements.txt 里加 `--extra-index-url https://download.pytorch.org/whl/cpu`），环境从 5.0 GB 降到 1.2 GB，也减少每轮快照体积
+- README 复现节命令统一改为 `env/bin/python`，并注明为什么不能叫 `.venv`
+
+**验证**：`env/bin/python` 跑通 STL（948.3 g / 64,100 面 / 全部水密）、渲染、FEA（SF_min 7.63、一阶 32.4 Hz），数值与前两轮环境完全一致。
+
+---
+
 ## 附：关键参数速查
 
 | 项目 | 数值 |

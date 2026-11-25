@@ -1,15 +1,14 @@
 # 协和逐日 v6 —— 仿真与 STL 生成依赖
 # 安装：pip install -r requirements.txt
-# 可选：如需 GPU 版 PyTorch，见 https://pytorch.org/get-started/locally/
+# PyTorch 走官方 CPU 索引：默认源上是 CUDA 构建，会多拉约 5 GB nvidia 运行时
+--extra-index-url https://download.pytorch.org/whl/cpu
 
 # 数值与绘图
 numpy==2.5.3
 matplotlib==3.11.0
 
-# 结构 FEA（sim/fea_v2.py，CPU 即可）
-# 注：默认源上的是 CUDA 构建（会附带 ~5GB nvidia 依赖）；只想跑 FEA 可用 CPU 轮子：
-#     pip install torch --index-url https://download.pytorch.org/whl/cpu
-torch==2.12.1
+# 结构 FEA（sim/fea_v2.py，CPU 即可）；需要 GPU 版见 https://pytorch.org/get-started/locally/
+torch==2.12.1+cpu
 
 # 三维建模与真布尔（sim/stl_v2_detail.py）
 trimesh==4.11.5
